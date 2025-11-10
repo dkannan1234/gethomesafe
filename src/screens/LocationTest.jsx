@@ -1,28 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "../styles.css"; // <-- NEW: pulls in the CSS variables
 
 // Vite + Leaflet marker fix
 import marker2x from "leaflet/dist/images/marker-icon-2x.png";
 import marker from "leaflet/dist/images/marker-icon.png";
 import shadow from "leaflet/dist/images/marker-shadow.png";
 L.Icon.Default.mergeOptions({ iconRetinaUrl: marker2x, iconUrl: marker, shadowUrl: shadow });
-
-const ui = {
-  page: { fontFamily: "Helvetica, Arial, sans-serif", maxWidth: 560, margin: "0 auto", padding: 16 },
-  h2: { fontSize: "clamp(20px, 4vw, 28px)", margin: "12px 0" },
-  card: { background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" },
-  row: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 },
-  btn: { padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 16, cursor: "pointer", minHeight: 44 },
-  primary: { background: "#bde0fe" },
-  secondary: { background: "#b7e4c7" },
-  warn: { background: "#ffd6a5" },
-  meta: { fontSize: 14, color: "#333" },
-  error: { color: "#b00020", marginTop: 8 },
-  dl: { display: "grid", gridTemplateColumns: "140px 1fr", rowGap: 6, columnGap: 12, marginTop: 10, fontSize: 15 },
-  dt: { color: "#555" },
-  code: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", background: "#f6f8fa", padding: "2px 6px", borderRadius: 6 }
-};
 
 export default function LocationMapTest() {
   const mapDivRef = useRef(null);
@@ -36,6 +21,30 @@ export default function LocationMapTest() {
   const [watching, setWatching] = useState(false);
   const [error, setError] = useState("");
 
+  // ⬇️ NEW: resolve --brand-accent once (so Leaflet gets an actual hex)
+  const brandAccent =
+    typeof window !== "undefined"
+      ? getComputedStyle(document.documentElement).getPropertyValue("--brand-accent").trim() || "#b83990"
+      : "#b83990";
+
+  // ⬇️ Only palette + font swapped to CSS vars; rest unchanged
+  const ui = {
+    page: { fontFamily: "var(--font-sans)", maxWidth: 560, margin: "0 auto", padding: 16 },
+    h2: { fontSize: "clamp(20px, 4vw, 28px)", margin: "12px 0" },
+    card: { background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" },
+    row: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 },
+    btn: { padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 16, cursor: "pointer", minHeight: 44 },
+    // ⬇️ CHANGED: use your palette
+    primary:   { background: "var(--color-light-pink)", color: "#492642" },
+    secondary: { background: "var(--color-dark-pink)",  color: "#fff" },
+    warn:      { background: "var(--color-dark-purple)", color: "#fff" },
+    meta: { fontSize: 14, color: "#333" },
+    error: { color: "#b00020", marginTop: 8 },
+    dl: { display: "grid", gridTemplateColumns: "140px 1fr", rowGap: 6, columnGap: 12, marginTop: 10, fontSize: 15 },
+    dt: { color: "#555" },
+    code: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", background: "#f6f8fa", padding: "2px 6px", borderRadius: 6 }
+  };
+
   // init map
   useEffect(() => {
     const map = L.map(mapDivRef.current, { center: [39.9526, -75.1652], zoom: 13 });
@@ -46,7 +55,6 @@ export default function LocationMapTest() {
     return () => map.remove();
   }, []);
 
-  // helpers
   const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 };
 
   const onSuccess = (p) => {
@@ -63,7 +71,6 @@ export default function LocationMapTest() {
       ts: new Date(p.timestamp)
     });
 
-    // place/update marker + accuracy ring
     if (!mapRef.current) return;
     const ll = L.latLng(lat, lng);
 
@@ -75,14 +82,14 @@ export default function LocationMapTest() {
 
     if (acc != null) {
       if (!circleRef.current) {
-        circleRef.current = L.circle(ll, { radius: acc, color: "#3b82f6", fillColor: "#3b82f6", fillOpacity: 0.15 });
+        // ⬇️ CHANGED: use resolved brand accent
+        circleRef.current = L.circle(ll, { radius: acc, color: brandAccent, fillColor: brandAccent, fillOpacity: 0.15 });
         circleRef.current.addTo(mapRef.current);
       } else {
         circleRef.current.setLatLng(ll).setRadius(acc);
       }
     }
 
-    // Fit on first fix, otherwise pan smoothly
     if (!watchedOnceRef.current) {
       const bounds = circleRef.current ? circleRef.current.getBounds() : L.latLngBounds([ll, ll]);
       mapRef.current.fitBounds(bounds.pad(0.5));
@@ -108,7 +115,7 @@ export default function LocationMapTest() {
 
   const startWatch = () => {
     if (!("geolocation" in navigator)) return setError("Geolocation not supported in this browser.");
-    if (watchIdRef.current != null) return; // already watching
+    if (watchIdRef.current != null) return;
     const id = navigator.geolocation.watchPosition(onSuccess, onError, options);
     watchIdRef.current = id;
     setWatching(true);
@@ -138,10 +145,8 @@ export default function LocationMapTest() {
           )}
         </div>
 
-        {/* Map */}
         <div ref={mapDivRef} style={{ width: "100%", height: "50vh", borderRadius: 12, marginTop: 12, overflow: "hidden", background: "#eef5ff" }} />
 
-        {/* Clean, aligned text display */}
         <div style={ui.dl}>
           <div style={ui.dt}>Time</div>
           <div>{pos ? <span style={ui.code}>{pos.ts.toLocaleTimeString()}</span> : "—"}</div>

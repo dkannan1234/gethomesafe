@@ -1,73 +1,111 @@
-/* ===========================
-   Font Import
-=========================== */
-@font-face {
-  font-family: 'Lexend';
-  src: url('./assets/Lexend.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
+/* styles.css */
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap');
+/* ---------- Font face (adjust path if using /public) ---------- */
+
+/* ---------- Theme tokens ---------- */
+:root {
+  --color-light-pink: #f5d7f2;
+  --color-dark-pink:  #b83990;
+  --color-dark-purple:#492642;
+
+  /* Neutral + UI tokens */
+  --bg: #f8f9fa;
+  --text: #333;
+  --muted: #555;
+  --surface: #ffffff;
+  --shadow: 0 1px 6px rgba(0,0,0,0.08);
+  --radius: 12px;
+
+  --font-sans: 'Lexend', Helvetica, Arial, sans-serif;
+
+  /* Buttons mapped to your palette */
+  --btn-primary-bg:   var(--color-light-pink);
+  --btn-secondary-bg: var(--color-dark-pink);
+  --btn-warn-bg:      var(--color-dark-purple);
+
+  /* Contrast text colors for buttons */
+  --btn-primary-fg:   #492642; /* dark text on light pink */
+  --btn-secondary-fg: #ffffff; /* white on dark pink */
+  --btn-warn-fg:      #ffffff; /* white on dark purple */
+
+  /* Brand-ish accent you can read from JS (Leaflet ring, etc.) */
+  --brand-accent: var(--color-dark-pink);
 }
 
-/* ===========================
-   Global Defaults
-=========================== */
+/* ---------- Global ---------- */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
 body {
   margin: 0;
-  padding: 0;
+  background: var(--bg);
+  color: var(--text);
   font-family: 'Lexend';
-  background-color: #f8f9fa;
-  color: #333;
 }
 
-/* ===========================
-   HelloStyles Component
-=========================== */
-.hello-page {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 2rem;
+/* ---------- Reusable utilities ---------- */
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px;
 }
 
-.hello-title {
-  font-size: clamp(24px, 5vw, 40px);
-  margin-bottom: 20px;
+.h1 { font-size: clamp(24px, 5vw, 40px); margin: 20px 0; }
+.h2 { font-size: clamp(20px, 4vw, 28px); margin: 12px 0; }
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: var(--shadow);
 }
 
-.hello-description {
-  max-width: 400px;
-  line-height: 1.5;
-  margin: 0 auto 24px;
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+.btn {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  min-height: 44px;
 }
 
-/* ===========================
-   Pastel Palette Section
-=========================== */
-.palette {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 16px;
+.btn--primary   { background: var(--btn-primary-bg);   color: var(--btn-primary-fg); }
+.btn--secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-fg); }
+.btn--warn      { background: var(--btn-warn-bg);      color: var(--btn-warn-fg); }
+
+.meta { font-size: 14px; color: var(--text); }
+.error { color: #b00020; margin-top: 8px; }
+
+.dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  row-gap: 6px; column-gap: 12px;
+  margin-top: 10px; font-size: 15px;
+}
+.dt { color: var(--muted); }
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #f6f8fa;
+  padding: 2px 6px;
+  border-radius: 6px;
 }
 
+/* HelloStyles bits (optional) */
+.hello-page { min-height: 100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:2rem; }
+.hello-title { composes: h1; } /* if your tooling supports it; otherwise keep the rule below */
+.hello-title { font-size: clamp(24px, 5vw, 40px); margin-bottom: 20px; font-weight: 400; }
+.hello-description { max-width: 400px; line-height: 1.5; margin: 0 auto 24px; }
+
+.palette { display:flex; flex-wrap:wrap; justify-content:center; gap:16px; }
 .swatch {
-  width: 80px;
-  height: 80px;
-  border-radius: 16px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  width: 80px; height: 80px; border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transition: transform .2s ease, box-shadow .2s ease;
 }
+.swatch:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.swatch-caption { margin-top:10px; font-size:14px; color:#555; }
 
-.swatch:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.swatch-caption {
-  margin-top: 10px;
-  font-size: 14px;
-  color: #555;
-}
+/* Map container utility */
+.map { width: 100%; height: 50vh; border-radius: var(--radius); margin-top: 12px; overflow: hidden; background: #eef5ff; }
