@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import "../styles.css"; // <-- NEW: pulls in the CSS variables
+import "../styles.css"; 
 
 // Vite + Leaflet marker fix
 import marker2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -21,20 +21,19 @@ export default function LocationMapTest() {
   const [watching, setWatching] = useState(false);
   const [error, setError] = useState("");
 
-  // ⬇️ NEW: resolve --brand-accent once (so Leaflet gets an actual hex)
+
   const brandAccent =
     typeof window !== "undefined"
       ? getComputedStyle(document.documentElement).getPropertyValue("--brand-accent").trim() || "#b83990"
       : "#b83990";
 
-  // ⬇️ Only palette + font swapped to CSS vars; rest unchanged
   const ui = {
     page: { fontFamily: "var(--font-sans)", maxWidth: 560, margin: "0 auto", padding: 16 },
     h2: { fontSize: "clamp(20px, 4vw, 28px)", margin: "12px 0" },
     card: { background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" },
     row: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 },
     btn: { padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 16, cursor: "pointer", minHeight: 44 },
-    // ⬇️ CHANGED: use your palette
+
     primary:   { background: "var(--color-light-pink)", color: "#492642" },
     secondary: { background: "var(--color-dark-pink)",  color: "#fff" },
     warn:      { background: "var(--color-dark-purple)", color: "#fff" },

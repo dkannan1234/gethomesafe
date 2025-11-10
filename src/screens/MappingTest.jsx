@@ -15,17 +15,27 @@ L.Icon.Default.mergeOptions({
 });
 
 const styles = {
-  page: { padding: 16, fontFamily: "Helvetica, Arial, sans-serif", maxWidth: 560, margin: "0 auto" },
-  h2: { fontSize: "clamp(20px, 4vw, 28px)", marginBottom: 12 },
-  card: { background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)", marginBottom: 12 },
-  row: { display: "grid", gap: 8 },
+  page: { fontFamily: "var(--font-sans), sans-serif", maxWidth: 560, margin: "0 auto", padding: 16 },
+  h2: { fontSize: "clamp(20px, 4vw, 28px)", margin: "12px 0" },
+  card: { background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" },
+  row: { display: "grid", gap: 8, marginTop: 8 },
   input: { padding: "12px 14px", borderRadius: 10, border: "1px solid #ddd", fontSize: 16 },
-  btn: { padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 16, cursor: "pointer", minHeight: 44 },
-  primary: { background: "#bde0fe" },
-  secondary: { background: "#b7e4c7" },
+  btn: {
+    padding: "12px 16px",
+    borderRadius: 12,
+    border: "none",
+    fontSize: 16,
+    cursor: "pointer",
+    minHeight: 44,
+    primary:   { background: "var(--color-light-pink)", color: "#492642" },
+    secondary: { background: "var(--color-dark-pink)",  color: "#fff" },
+    warn:      { background: "var(--color-dark-purple)", color: "#fff" },
+  },
+  primary:   { background: "var(--color-light-pink)", color: "#492642" },
+  secondary: { background: "var(--color-dark-pink)",  color: "#fff" },
   map: { width: "100%", height: "60vh", borderRadius: 12, overflow: "hidden", background: "#eef5ff" },
   chips: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 },
-  chip: { padding: "8px 12px", borderRadius: 999, background: "#ffd6a5", border: "none", cursor: "pointer" },
+  chip: { padding: "8px 12px", borderRadius: 999, background: "var(--color-dark-purple)",  color: "#fff", border: "none", cursor: "pointer" },
   meta: { fontSize: 14, color: "#333", marginTop: 8 }
 };
 
