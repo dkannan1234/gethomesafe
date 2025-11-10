@@ -1,0 +1,73 @@
+/* ===========================
+   Font Import
+=========================== */
+@font-face {
+  font-family: 'Lexend';
+  src: url('./assets/Lexend.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* ===========================
+   Global Defaults
+=========================== */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Lexend';
+  background-color: #f8f9fa;
+  color: #333;
+}
+
+/* ===========================
+   HelloStyles Component
+=========================== */
+.hello-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+}
+
+.hello-title {
+  font-size: clamp(24px, 5vw, 40px);
+  margin-bottom: 20px;
+}
+
+.hello-description {
+  max-width: 400px;
+  line-height: 1.5;
+  margin: 0 auto 24px;
+}
+
+/* ===========================
+   Pastel Palette Section
+=========================== */
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+
+.swatch {
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.swatch:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.swatch-caption {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #555;
+}
