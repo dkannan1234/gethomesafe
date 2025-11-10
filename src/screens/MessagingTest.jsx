@@ -5,9 +5,9 @@ import {
 } from "firebase/firestore";
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import "../styles.css"; // <-- pull in Lexend + theme tokens
+import "../styles.css"; // <-- Lexend + theme tokens
 
-// Firebase config (unchanged)
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAJhv7reZJdq3Klq4Df-aVhwTISN6YA-kQ",
   authDomain: "gethomesafe-220f1.firebaseapp.com",
@@ -22,7 +22,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const analytics = getAnalytics(app);
 
-// Theme-aligned UI (tiny edits only)
+// Themed UI
 const ui = {
   page: { fontFamily: "var(--font-sans), sans-serif", maxWidth: 560, margin: "0 auto", padding: 16 },
   h2: { fontSize: "clamp(20px, 4vw, 28px)", margin: "12px 0" },
@@ -36,13 +36,13 @@ const ui = {
     fontSize: 16,
     cursor: "pointer",
     minHeight: 44,
-    background: "var(--color-dark-pink)",   // themed
+    background: "var(--color-dark-pink)",
     color: "#fff"
   },
   msgList: { display: "flex", flexDirection: "column", gap: 8, marginTop: 12, maxHeight: "50vh", overflowY: "auto" },
   bubbleMe: {
     alignSelf: "flex-end",
-    background: "var(--color-light-pink)",  // themed
+    background: "var(--color-light-pink)",
     color: "#492642",
     borderRadius: 12,
     padding: "10px 12px",
@@ -50,7 +50,7 @@ const ui = {
   },
   bubbleOther: {
     alignSelf: "flex-start",
-    background: "var(--color-dark-purple)", // themed
+    background: "var(--color-dark-purple)",
     color: "#fff",
     borderRadius: 12,
     padding: "10px 12px",
@@ -60,13 +60,15 @@ const ui = {
 };
 
 export default function MessagingTest() {
-  const [room, setRoom] = useState("demo-room");
   const [name, setName] = useState(localStorage.getItem("chat_name") || "");
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const [latency, setLatency] = useState(null);
   const listRef = useRef(null);
   const lastTitle = useRef(document.title);
+
+  // Hidden default room (shared across sessions)
+  const room = "room";
 
   useEffect(() => {
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
@@ -127,11 +129,12 @@ export default function MessagingTest() {
         <div style={ui.row}>
           <label>
             <div>Display Name</div>
-            <input style={ui.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
-          </label>
-          <label>
-            <div>Room ID</div>
-            <input style={ui.input} value={room} onChange={(e) => setRoom(e.target.value)} placeholder="demo-room" />
+            <input
+              style={ui.input}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+            />
           </label>
         </div>
 
@@ -166,10 +169,6 @@ export default function MessagingTest() {
           <strong>Latency:</strong> {latency ?? "—"} ms (approx. send/receive/render)
         </div>
       </div>
-
-      <p style={{ ...ui.meta, marginTop: 10 }}>
-        Demo tip: open this page on two devices, set the same <em>Room ID</em>, and send a message.
-      </p>
     </div>
   );
 }

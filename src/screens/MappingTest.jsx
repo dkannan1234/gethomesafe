@@ -20,34 +20,17 @@ const styles = {
   card: { background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" },
   row: { display: "grid", gap: 8, marginTop: 8 },
   input: { padding: "12px 14px", borderRadius: 10, border: "1px solid #ddd", fontSize: 16 },
-  btn: {
-    padding: "12px 16px",
-    borderRadius: 12,
-    border: "none",
-    fontSize: 16,
-    cursor: "pointer",
-    minHeight: 44,
-    primary:   { background: "var(--color-light-pink)", color: "#492642" },
-    secondary: { background: "var(--color-dark-pink)",  color: "#fff" },
-    warn:      { background: "var(--color-dark-purple)", color: "#fff" },
-  },
-  primary:   { background: "var(--color-light-pink)", color: "#492642" },
-  secondary: { background: "var(--color-dark-pink)",  color: "#fff" },
+  btn: { padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 16, cursor: "pointer", minHeight: 44 },
+  primary: { background: "var(--color-light-pink)", color: "#492642" },
+  secondary: { background: "var(--color-dark-pink)", color: "#fff" },
   map: { width: "100%", height: "60vh", borderRadius: 12, overflow: "hidden", background: "#eef5ff" },
-  chips: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 },
-  chip: { padding: "8px 12px", borderRadius: 999, background: "var(--color-dark-purple)",  color: "#fff", border: "none", cursor: "pointer" },
   meta: { fontSize: 14, color: "#333", marginTop: 8 }
 };
 
 // Simple geocoder (free) using OpenStreetMap Nominatim
 async function geocode(query) {
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&limit=1`;
-  const res = await fetch(url, {
-    headers: {
-      // polite header; Nominatim asks for an identifying UA or contact
-      "Accept": "application/json"
-    }
-  });
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
   const data = await res.json();
   if (!data?.length) throw new Error(`No results for "${query}"`);
   const { lat, lon } = data[0];
@@ -65,7 +48,6 @@ export default function MappingTest() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // init map centered on Philly
     const map = L.map(mapDivRef.current, {
       center: [39.9526, -75.1652],
       zoom: 13,
@@ -74,34 +56,36 @@ export default function MappingTest() {
 
     // OSM tiles (free)
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© OpenStreetMap contributors'
+      attribution: "© OpenStreetMap contributors",
     }).addTo(map);
 
-    // Routing control (uses OSRM demo server by default — fine for class demos)
+    // Routing control — keep markers draggable, avoid adding new ones by clicking
     const routing = L.Routing.control({
       waypoints: [],
-      routeWhileDragging: false,
-      addWaypoints: false,
-      show: false, // hide the big panel UI; we’ll show our own metrics
-      lineOptions: { addWaypoints: false }
+      routeWhileDragging: true,     // live updates while dragging markers
+      draggableWaypoints: true,     // allow dragging the existing markers
+      addWaypoints: false,          // but don't allow adding extras by clicking
+      show: false,                  // hide the default big panel
+      lineOptions: { addWaypoints: false },
+      fitSelectedRoutes: false,     // we'll fit bounds ourselves after routing
     })
-    .on("routesfound", (e) => {
-      const route = e.routes?.[0];
-      if (route) {
-        const distanceMeters = route.summary.totalDistance;
-        const timeSeconds = route.summary.totalTime;
-        setMetrics({
-          distanceText: `${(distanceMeters / 1000).toFixed(1)} km`,
-          durationText: `${Math.round(timeSeconds / 60)} mins`,
-          latencyMs: null, // set below when measuring request→render
-        });
-      }
-    })
-    .on("routingerror", (e) => {
-      setError("Routing failed. Try different locations.");
-      console.error(e?.error || e);
-    })
-    .addTo(map);
+      .on("routesfound", (e) => {
+        const route = e.routes?.[0];
+        if (route) {
+          const distanceMeters = route.summary.totalDistance;
+          const timeSeconds = route.summary.totalTime;
+          setMetrics({
+            distanceText: `${(distanceMeters / 1000).toFixed(1)} km`,
+            durationText: `${Math.round(timeSeconds / 60)} mins`,
+            latencyMs: null,
+          });
+        }
+      })
+      .on("routingerror", (e) => {
+        setError("Routing failed. Try different locations.");
+        console.error(e?.error || e);
+      })
+      .addTo(map);
 
     mapRef.current = map;
     routeRef.current = routing;
@@ -116,7 +100,6 @@ export default function MappingTest() {
     e?.preventDefault?.();
     setError("");
     setMetrics(null);
-
     if (!mapRef.current || !routeRef.current) return;
 
     const t0 = performance.now();
@@ -124,18 +107,17 @@ export default function MappingTest() {
       const [origLat, origLng] = await geocode(origin);
       const [destLat, destLng] = await geocode(destination);
 
-      // Update routing waypoints
       routeRef.current.setWaypoints([
         L.latLng(origLat, origLng),
         L.latLng(destLat, destLng),
       ]);
 
-      // Fit map to route a bit later after route renders
+      // After the route appears, fit bounds and record latency
       setTimeout(() => {
         const route = routeRef.current._lastRoute; // internal but practical
         if (route?.bounds) mapRef.current.fitBounds(route.bounds, { padding: [30, 30] });
         const t1 = performance.now();
-        setMetrics((m) => m ? { ...m, latencyMs: Math.round(t1 - t0) } : m);
+        setMetrics((m) => (m ? { ...m, latencyMs: Math.round(t1 - t0) } : m));
       }, 50);
     } catch (err) {
       console.error(err);
@@ -145,17 +127,12 @@ export default function MappingTest() {
 
   // auto draw once after init
   useEffect(() => {
-    // give Leaflet a tick to mount before first draw
-    const id = setTimeout(() => { drawRoute(); }, 50);
+    const id = setTimeout(() => {
+      drawRoute();
+    }, 50);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const quickFill = (a, b) => {
-    setOrigin(a);
-    setDestination(b);
-    setTimeout(() => drawRoute(), 0);
-  };
 
   return (
     <div style={styles.page}>
@@ -189,23 +166,21 @@ export default function MappingTest() {
 
           <div style={{ display: "flex", gap: 8 }}>
             <button type="submit" style={{ ...styles.btn, ...styles.primary }}>Show Route</button>
-            <button type="button" style={{ ...styles.btn, ...styles.secondary }} onClick={() =>
-              quickFill("Van Pelt Library, Philadelphia", "Hospital of the University of Pennsylvania")
-            }>
-              Penn Campus Demo
-            </button>
           </div>
 
-          <div style={styles.chips}>
-            <button type="button" style={styles.chip} onClick={() => quickFill("Rittenhouse Square", "Philadelphia Museum of Art")}>City Demo</button>
-            <button type="button" style={styles.chip} onClick={() => quickFill("30th Street Station", "Philadelphia International Airport")}>Transit Demo</button>
+          <div style={{ fontSize: 13, color: "#555" }}>
+            Tip: drag the start/end markers on the map to refine the route.
           </div>
 
           {metrics && (
             <div style={styles.meta}>
               <strong>Distance:</strong> {metrics.distanceText} &nbsp; • &nbsp;
               <strong>ETA:</strong> {metrics.durationText} &nbsp; • &nbsp;
-              {metrics.latencyMs != null && (<><strong>Req→Render:</strong> {metrics.latencyMs} ms</>)}
+              {metrics.latencyMs != null && (
+                <>
+                  <strong>Req→Render:</strong> {metrics.latencyMs} ms
+                </>
+              )}
             </div>
           )}
           {error && <div style={{ color: "#b00020", marginTop: 6 }}>{error}</div>}
@@ -213,10 +188,6 @@ export default function MappingTest() {
       </div>
 
       <div ref={mapDivRef} style={styles.map} aria-label="Route map" />
-
-      <p style={{ fontSize: 13, color: "#666", marginTop: 10 }}>
-        Tiles: OpenStreetMap • Routing: OSRM demo server (good for class demos).
-      </p>
     </div>
   );
 }

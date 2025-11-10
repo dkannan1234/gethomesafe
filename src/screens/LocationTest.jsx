@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import "../styles.css"; 
+import "../styles.css";
 
 // Vite + Leaflet marker fix
 import marker2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -21,7 +21,6 @@ export default function LocationMapTest() {
   const [watching, setWatching] = useState(false);
   const [error, setError] = useState("");
 
-
   const brandAccent =
     typeof window !== "undefined"
       ? getComputedStyle(document.documentElement).getPropertyValue("--brand-accent").trim() || "#b83990"
@@ -33,9 +32,7 @@ export default function LocationMapTest() {
     card: { background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" },
     row: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 },
     btn: { padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 16, cursor: "pointer", minHeight: 44 },
-
     primary:   { background: "var(--color-light-pink)", color: "#492642" },
-    secondary: { background: "var(--color-dark-pink)",  color: "#fff" },
     warn:      { background: "var(--color-dark-purple)", color: "#fff" },
     meta: { fontSize: 14, color: "#333" },
     error: { color: "#b00020", marginTop: 8 },
@@ -81,7 +78,6 @@ export default function LocationMapTest() {
 
     if (acc != null) {
       if (!circleRef.current) {
-        // ⬇️ CHANGED: use resolved brand accent
         circleRef.current = L.circle(ll, { radius: acc, color: brandAccent, fillColor: brandAccent, fillOpacity: 0.15 });
         circleRef.current.addTo(mapRef.current);
       } else {
@@ -107,14 +103,9 @@ export default function LocationMapTest() {
     setError(msg);
   };
 
-  const getOnce = () => {
-    if (!("geolocation" in navigator)) return setError("Geolocation not supported in this browser.");
-    navigator.geolocation.getCurrentPosition(onSuccess, onError, options);
-  };
-
   const startWatch = () => {
     if (!("geolocation" in navigator)) return setError("Geolocation not supported in this browser.");
-    if (watchIdRef.current != null) return;
+    if (watchIdRef.current != null) return; // already watching
     const id = navigator.geolocation.watchPosition(onSuccess, onError, options);
     watchIdRef.current = id;
     setWatching(true);
@@ -128,6 +119,8 @@ export default function LocationMapTest() {
     setWatching(false);
   };
 
+  const toggleWatch = () => (watching ? stopWatch() : startWatch());
+
   useEffect(() => () => stopWatch(), []); // cleanup on unmount
 
   return (
@@ -136,15 +129,19 @@ export default function LocationMapTest() {
 
       <div style={ui.card}>
         <div style={ui.row}>
-          <button style={{ ...ui.btn, ...ui.primary }} onClick={getOnce}>Get Location Once</button>
-          {!watching ? (
-            <button style={{ ...ui.btn, ...ui.secondary }} onClick={startWatch}>Start Live Updates</button>
-          ) : (
-            <button style={{ ...ui.btn, ...ui.warn }} onClick={stopWatch}>Stop Live Updates</button>
-          )}
+          {/* Single button: starts live location, toggles to Stop */}
+          <button
+            style={{ ...ui.btn, ...(watching ? ui.warn : ui.primary) }}
+            onClick={toggleWatch}
+          >
+            {watching ? "Stop" : "Get Location"}
+          </button>
         </div>
 
-        <div ref={mapDivRef} style={{ width: "100%", height: "50vh", borderRadius: 12, marginTop: 12, overflow: "hidden", background: "#eef5ff" }} />
+        <div
+          ref={mapDivRef}
+          style={{ width: "100%", height: "50vh", borderRadius: 12, marginTop: 12, overflow: "hidden", background: "#eef5ff" }}
+        />
 
         <div style={ui.dl}>
           <div style={ui.dt}>Time</div>
@@ -168,11 +165,6 @@ export default function LocationMapTest() {
 
         {error && <div style={ui.error}>{error}</div>}
       </div>
-
-      <p style={{ ...ui.meta, marginTop: 10 }}>
-        Tip: Geolocation is allowed on <strong>localhost</strong>. For phones, you’ll need <strong>HTTPS</strong>
-        (deploy or use an HTTPS tunnel) for accurate GPS.
-      </p>
     </div>
   );
 }
