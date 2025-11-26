@@ -1,26 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  getFirestore, collection, addDoc, serverTimestamp,
-  query, orderBy, onSnapshot
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  onSnapshot
 } from "firebase/firestore";
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import "../styles.css"; // <-- Lexend + theme tokens
-
-// Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyAJhv7reZJdq3Klq4Df-aVhwTISN6YA-kQ",
-  authDomain: "gethomesafe-220f1.firebaseapp.com",
-  projectId: "gethomesafe-220f1",
-  storageBucket: "gethomesafe-220f1.firebasestorage.app",
-  messagingSenderId: "386984728363",
-  appId: "1:386984728363:web:d61980ac3c3f73464f976e",
-  measurementId: "G-M0P3TWGBWJ"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const analytics = getAnalytics(app);
+import { db } from "../firebaseClient";  // <-- use shared db
+import "../styles.css"; // Lexend + theme tokens
 
 // Themed UI
 const ui = {
@@ -67,7 +55,7 @@ export default function MessagingTest() {
   const listRef = useRef(null);
   const lastTitle = useRef(document.title);
 
-  // Hidden default room (shared across sessions)
+  // Hidden default room (shared across sessions for now)
   const room = "room";
 
   useEffect(() => {
@@ -76,7 +64,10 @@ export default function MessagingTest() {
     }
   }, []);
 
-  const colRef = useMemo(() => collection(db, "rooms", room, "messages"), [room]);
+  const colRef = useMemo(
+    () => collection(db, "rooms", room, "messages"),
+    [room]
+  );
 
   useEffect(() => {
     const q = query(colRef, orderBy("createdAt", "asc"));
@@ -91,13 +82,18 @@ export default function MessagingTest() {
         document.title = "• New message";
         setTimeout(() => (document.title = lastTitle.current), 1200);
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { new Notification(`${newest.name || "Someone"}: ${newest.text}`); } catch {}
+          try {
+            new Notification(`${newest.name || "Someone"}: ${newest.text}`);
+          } catch {}
         }
       }
 
       const t1 = performance.now();
       setLatency(Math.max(0, Math.round(t1 - t0)));
-      setTimeout(() => listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" }), 10);
+      setTimeout(
+        () => listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" }),
+        10
+      );
     });
     return () => unsub();
   }, [colRef, name]);
