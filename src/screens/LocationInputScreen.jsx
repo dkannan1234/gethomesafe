@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { db } from "../firebaseClient";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
-const CURRENT_USER_ID = "alice"; // TODO: replace with real auth user later
+
 
 // Plain helper: NO hooks here
 function loadGoogleMaps(apiKey) {
@@ -47,6 +47,8 @@ export default function LocationInputScreen({ onContinue }) {
   const directionsRendererRef = useRef(null);
   const navigate = useNavigate();
 
+  const currentUserId = localStorage.getItem("ghs_user_id");
+
   const originInputRef = useRef(null);
   const destInputRef = useRef(null);
   const originAutocompleteRef = useRef(null);
@@ -61,8 +63,12 @@ export default function LocationInputScreen({ onContinue }) {
   const [destCoords, setDestCoords] = useState(null);
   const [destAddress, setDestAddress] = useState("");
 
-  const [isRouting, setIsRouting] = useState(false);
   const [routeError, setRouteError] = useState("");
+
+  // NEW: route + button state
+  const [routeReady, setRouteReady] = useState(false);   // has route been drawn?
+  const [isRouting, setIsRouting] = useState(false);     // doing directions call
+  const [isSavingTrip, setIsSavingTrip] = useState(false); // writing to Firestore
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 
@@ -217,10 +223,10 @@ export default function LocationInputScreen({ onContinue }) {
     }
   }, [originCoords]);
 
-  // 4) Handle "Show route & find matches"
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Helper: compute + draw the route
+  const showRoute = () => {
     setRouteError("");
+    setRouteReady(false);
 
     const originInputVal = originInputRef.current?.value.trim() || "";
     const destInputVal = destInputRef.current?.value.trim() || "";
@@ -246,92 +252,132 @@ export default function LocationInputScreen({ onContinue }) {
 
     setIsRouting(true);
 
-    try {
-      const gmaps = window.google.maps;
-      const originForRoute = originCoords || originInputVal;
-      const destinationForRoute = destCoords || destInputVal;
+    const gmaps = window.google.maps;
+    const originForRoute = originCoords || originInputVal;
+    const destinationForRoute = destCoords || destInputVal;
 
-      directionsServiceRef.current.route(
-        {
-          origin: originForRoute,
-          destination: destinationForRoute,
-          travelMode: gmaps.TravelMode.WALKING,
-        },
-        async (result, status) => {
-          setIsRouting(false);
+    directionsServiceRef.current.route(
+      {
+        origin: originForRoute,
+        destination: destinationForRoute,
+        travelMode: gmaps.TravelMode.WALKING,
+      },
+      (result, status) => {
+        setIsRouting(false);
 
-          if (status !== "OK" || !result) {
-            console.error("Directions request failed:", status);
-            setRouteError("Could not compute route between these points.");
-            return;
-          }
-
-          // Draw route on map
-          directionsRendererRef.current.setDirections(result);
-          if (
-            result.routes &&
-            result.routes[0] &&
-            result.routes[0].bounds &&
-            mapRef.current
-          ) {
-            mapRef.current.fitBounds(result.routes[0].bounds);
-          }
-
-          // Lift data up if parent cares
-          if (onContinue) {
-            onContinue({
-              origin: {
-                coords: originCoords || null,
-                text: originInputVal || originAddress || "",
-              },
-              destination: {
-                coords: destCoords || null,
-                text: destAddress || destInputVal,
-              },
-              directions: result,
-            });
-          }
-
-          // Create trip in Firestore so matching can run
-          try {
-            const tripsCol = collection(db, "trips");
-            const docRef = await addDoc(tripsCol, {
-              userId: CURRENT_USER_ID,
-              origin: {
-                text: originInputVal || originAddress || "",
-                lat: originCoords?.lat ?? null,
-                lng: originCoords?.lng ?? null,
-              },
-              destination: {
-                text: destAddress || destInputVal,
-                lat: destCoords?.lat ?? null,
-                lng: destCoords?.lng ?? null,
-              },
-              plannedStartTime: new Date().toISOString(),
-              plannedEndTime: new Date(
-                Date.now() + 60 * 60 * 1000
-              ).toISOString(),
-              status: "searching",
-              activeMatchId: null,
-              excludedUserIds: [],
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
-
-            // Navigate to match screen for this new trip
-            navigate(`/match/${docRef.id}`);
-          } catch (err) {
-            console.error("Failed to create trip:", err);
-            setRouteError("Trip save failed, but route was shown. Try again.");
-          }
+        if (status !== "OK" || !result) {
+          console.error("Directions request failed:", status);
+          setRouteError("Could not compute route between these points.");
+          return;
         }
-      );
+
+        // Draw route on map
+        directionsRendererRef.current.setDirections(result);
+        if (
+          result.routes &&
+          result.routes[0] &&
+          result.routes[0].bounds &&
+          mapRef.current
+        ) {
+          mapRef.current.fitBounds(result.routes[0].bounds);
+        }
+
+        // Lift data up if parent cares
+        const originText = originInputVal || originAddress || "";
+        const destText = destAddress || destInputVal;
+
+        if (onContinue) {
+          onContinue({
+            origin: {
+              coords: originCoords || null,
+              text: originText,
+            },
+            destination: {
+              coords: destCoords || null,
+              text: destText,
+            },
+            directions: result,
+          });
+        }
+
+        setRouteReady(true);
+      }
+    );
+  };
+
+  // Helper: create trip + navigate to match screen
+  const createTripAndNavigate = async () => {
+    setRouteError("");
+
+    const originInputVal = originInputRef.current?.value.trim() || "";
+    const destInputVal = destInputRef.current?.value.trim() || "";
+
+    const originText = originInputVal || originAddress || "";
+    const destText = destAddress || destInputVal;
+
+    if (!destText) {
+      setRouteError("Missing destination.");
+      return;
+    }
+
+    setIsSavingTrip(true);
+
+    try {
+      const tripsCol = collection(db, "trips");
+      const docRef = await addDoc(tripsCol, {
+        userId: currentUserId,
+        origin: {
+          text: originText,
+          lat: originCoords?.lat ?? null,
+          lng: originCoords?.lng ?? null,
+        },
+        destination: {
+          text: destText,
+          lat: destCoords?.lat ?? null,
+          lng: destCoords?.lng ?? null,
+        },
+        plannedStartTime: new Date().toISOString(),
+        plannedEndTime: new Date(
+          Date.now() + 60 * 60 * 1000
+        ).toISOString(),
+        status: "searching",
+        activeMatchId: null,
+        excludedUserIds: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      navigate(`/match/${docRef.id}`);
     } catch (err) {
-      console.error(err);
-      setIsRouting(false);
-      setRouteError("Something went wrong preparing your trip.");
+      console.error("Failed to create trip:", err);
+      setRouteError("Trip save failed. Try again.");
+    } finally {
+      setIsSavingTrip(false);
     }
   };
+
+  // Single button: first click = show route, second click = create trip
+  const handlePrimaryClick = (e) => {
+    e.preventDefault();
+
+    if (!routeReady) {
+      // First phase: just draw the route
+      showRoute();
+    } else {
+      // Second phase: route already visible → save + match
+      createTripAndNavigate();
+    }
+  };
+
+  const isBusy = isRouting || isSavingTrip;
+
+  const buttonLabel = !routeReady
+    ? isRouting
+      ? "Calculating route..."
+      : "Show route"
+    : isSavingTrip
+    ? "Finding your match..."
+    : "Find me a match";
 
   return (
     <div
@@ -359,7 +405,7 @@ export default function LocationInputScreen({ onContinue }) {
               color: "#492642",
             }}
           >
-            Where are you going?
+            Start a new journey
           </h1>
           <p
             style={{
@@ -368,12 +414,12 @@ export default function LocationInputScreen({ onContinue }) {
               color: "#4b3b48",
             }}
           >
-            Set your trip so we can match you with people heading along similar routes.
+            Enter your route so we can show your path and then find people heading the same way.
           </p>
         </header>
 
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handlePrimaryClick}
           style={{
             background: "#ffffff",
             borderRadius: 20,
@@ -386,7 +432,13 @@ export default function LocationInputScreen({ onContinue }) {
           <section style={{ marginBottom: 16 }}>
             <label
               htmlFor="origin-input"
-              style={{ fontSize: 13, fontWeight: 600, color: "#59455a", display: "block", marginBottom: 6 }}
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#59455a",
+                display: "block",
+                marginBottom: 6,
+              }}
             >
               Start
             </label>
@@ -423,7 +475,13 @@ export default function LocationInputScreen({ onContinue }) {
           <section style={{ marginBottom: 16 }}>
             <label
               htmlFor="destination-input"
-              style={{ fontSize: 13, fontWeight: 600, color: "#59455a", display: "block", marginBottom: 6 }}
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#59455a",
+                display: "block",
+                marginBottom: 6,
+              }}
             >
               Destination
             </label>
@@ -444,9 +502,10 @@ export default function LocationInputScreen({ onContinue }) {
             />
           </section>
 
+          {/* SINGLE SMART BUTTON */}
           <button
             type="submit"
-            disabled={isRouting}
+            disabled={isBusy}
             style={{
               width: "100%",
               padding: "12px 16px",
@@ -454,13 +513,19 @@ export default function LocationInputScreen({ onContinue }) {
               border: "none",
               fontSize: 16,
               fontWeight: 600,
-              cursor: !isRouting ? "pointer" : "default",
-              background: !isRouting ? "#492642" : "#cbb6d0",
-              color: "#fff",
+              cursor: !isBusy ? "pointer" : "default",
+              background: !routeReady
+                ? !isBusy
+                  ? "#492642"
+                  : "#cbb6d0"
+                : !isBusy
+                ? "#f5d7f2"
+                : "#e0d1e5",
+              color: !routeReady ? "#fff" : "#492642",
               transition: "background 0.15s ease",
             }}
           >
-            {isRouting ? "Calculating route..." : "Show route & find matches"}
+            {buttonLabel}
           </button>
 
           {routeError && (
@@ -498,8 +563,8 @@ export default function LocationInputScreen({ onContinue }) {
               margin: 0,
             }}
           >
-            We’ll use these points (plus your live location) to find people heading along similar
-            routes, propose a safe meeting spot, and guide you along vetted paths.
+            First we’ll show your walking route from where you are. Once it looks right, tap
+            “Find me a match” to look for people heading along a similar path.
           </p>
         </div>
       </div>
