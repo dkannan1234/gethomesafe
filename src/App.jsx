@@ -18,6 +18,8 @@ import LocationTest from "./screens/LocationTest.jsx";
 import MappingTest from "./screens/MappingTest.jsx";
 import GoogleMapLocationTest from "./screens/GoogleMapLocationTest.jsx";
 import DevSeedData from "./screens/DevSeedData.jsx";
+import PastTripScreen from "./screens/PastTripScreen.jsx";
+import MessagingScreen from "./screens/MessagingScreen.jsx";
 
 import "./styles.css";
 
@@ -52,7 +54,9 @@ export default function App() {
           <Route path="/dev/location-test" element={<LocationTest />} />
           <Route path="/dev/mapping-test" element={<MappingTest />} />
           <Route path="/dev/new-mapping-test" element={<GoogleMapLocationTest />} />
+          <Route path="/past-trips" element={<PastTripScreen />} />
           <Route path="/dev/dev-seed" element={<DevSeedData />} />
+          <Route path="/trips/:tripId/messages" element={<MessagingScreen />} />
 
           {/* unknown routes → login */}
           <Route path="*" element={<Navigate to="/login" replace />} />

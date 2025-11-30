@@ -7,6 +7,7 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 const User = require("./models/User");
+const Trip = require("./models/Trip");
 
 const app = express();
 
@@ -114,6 +115,49 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Server error logging in." });
+  }
+});
+
+app.post("/api/trips", async (req, res) => {
+  try {
+    const { userId, otherUserId, startLocation, endLocation, tripDate } =
+      req.body;
+
+    if (!userId || !otherUserId || !startLocation || !endLocation) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "userId, otherUserId, startLocation, and endLocation are required.",
+        });
+    }
+
+    const trip = await Trip.create({
+      userId,
+      otherUserId,
+      startLocation,
+      endLocation,
+      tripDate: tripDate ? new Date(tripDate) : new Date(),
+    });
+
+    res.status(201).json(trip);
+  } catch (err) {
+    console.error("Error creating trip:", err);
+    res.status(500).json({ message: "Failed to create trip." });
+  }
+});
+
+// --- Get all trips for a user (most recent first) ---
+app.get("/api/trips/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const trips = await Trip.find({ userId }).sort({ tripDate: -1 }); // newest first
+
+    res.json(trips);
+  } catch (err) {
+    console.error("Error fetching trips:", err);
+    res.status(500).json({ message: "Failed to fetch trips." });
   }
 });
 

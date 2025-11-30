@@ -7,8 +7,9 @@ import {
 } from "../services/matchingService";
 import { fetchUser } from "../services/userService";
 import { db } from "../firebaseClient";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { haversineDistanceMeters } from "../utils/matching";
+import { createTripRecord } from "../services/tripService";
 
 function loadGoogleMaps(apiKey) {
   return new Promise((resolve, reject) => {
@@ -45,6 +46,11 @@ export default function MatchScreen() {
   const [meetingPoint, setMeetingPoint] = useState(null);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
+
+  const [videoCandidate, setVideoCandidate] = useState(null);
+  const [videoExcludedIds, setVideoExcludedIds] = useState([]);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoConfirmed, setVideoConfirmed] = useState(false);
 
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
@@ -91,6 +97,60 @@ export default function MatchScreen() {
       setLoading(false);
     }
   };
+
+  const loadVideoCandidate = async () => {
+  if (!myTrip) {
+    setError("Your trip is still loading – please try again in a moment.");
+    return;
+  }
+
+  setVideoLoading(true);
+  setVideoConfirmed(false);
+
+  try {
+    const q = query(
+      collection(db, "users"),
+      where("prefersVideoFirst", "==", true)
+    );
+    const snap = await getDocs(q);
+    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const candidates = all.filter(
+      (u) => u.id !== myTrip.userId && !videoExcludedIds.includes(u.id)
+    );
+
+    if (!candidates.length) {
+      setVideoCandidate(null);
+      setError("No other FaceTime-first users are available right now.");
+      return;
+    }
+
+    const next =
+      candidates[Math.floor(Math.random() * candidates.length)];
+    setVideoCandidate(next);
+  } catch (err) {
+    console.error("[MatchScreen] loadVideoCandidate error", err);
+    setError("Could not look up FaceTime users. Please try again.");
+  } finally {
+    setVideoLoading(false);
+  }
+};
+
+const handleFaceTimeClick = () => {
+  loadVideoCandidate();
+};
+
+const handleFaceTimeConfirm = () => {
+  if (!videoCandidate) return;
+  setVideoConfirmed(true);
+};
+
+const handleFaceTimeReject = () => {
+  if (!videoCandidate) return;
+  setVideoExcludedIds((prev) => [...prev, videoCandidate.id]);
+  setVideoCandidate(null);
+  loadVideoCandidate(); // try again, excluding the rejected user
+};
 
   useEffect(() => {
     loadMatch();
@@ -252,14 +312,49 @@ export default function MatchScreen() {
     };
   }, [myTrip, meetingPoint, apiKey]);
 
-  const handleAccept = () => {
+  const handleAccept = async () => {
+    if (!myTrip || !bestMatch) return;
+
     setAccepted(true);
+
+  
+    try {
+    const userId = myTrip.userId;                // the current user on this trip
+    const otherUserId = bestMatch.trip.userId;   // the matched user’s trip.userId
+
+    await createTripRecord({
+      userId,
+      otherUserId,
+      startLocation: myTrip.origin?.text ?? "Unknown start",
+      endLocation: myTrip.destination?.text ?? "Unknown end",
+      // you can use plannedStartTime from Firestore if you want:
+      tripDate: myTrip.plannedStartTime ?? new Date().toISOString(),
+    });
+
+    // optional: show a toast or set some "saved" state here
+  } catch (err) {
+    console.error("[MatchScreen] Failed to save trip to server:", err);
+    // optional: show a lightweight error message
+  }
+
     // TODO: update Firestore to mark as matched
   };
 
   const handleMessage = () => {
-    if (!accepted) return;
-    navigate("/messages");
+    if (!accepted || !myTrip || !bestMatch) return;
+
+  const currentUserName =
+    localStorage.getItem("ghs_name") || myTrip.userId || "You";
+
+  navigate(`/trips/${tripId}/messages`, {
+    state: {
+      myUserId: myTrip.userId,          // e.g. "alice"
+      otherUserId: bestMatch.user.id,   // e.g. "bob"
+      myName: currentUserName,
+      otherName: bestMatch.user.name,
+      // roomId optional – room is deterministic anyway
+    },
+  });
   };
 
   const handleCall = (e) => {
@@ -302,6 +397,91 @@ export default function MatchScreen() {
       </button>
 
       {error && <div className="error">{error}</div>}
+
+      {/* FaceTime fallback when pair is loading or missing */}
+      {(loading || !bestMatch) && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn btn--primary btn--full"
+            onClick={handleFaceTimeClick}
+            disabled={videoLoading}
+          >
+            {videoLoading ? "Finding someone to FaceTime…" : "FaceTime another user"}
+          </button>
+        </div>
+      )}
+
+      {videoCandidate && (
+        <div className="card card--padded" style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "var(--color-dark-purple)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 20,
+              }}
+            >
+              {videoCandidate.name?.[0] || "U"}
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>
+                {videoCandidate.name}
+              </div>
+              <div style={{ fontSize: 13, opacity: 0.8 }}>
+                {videoCandidate.pronouns} • Rating{" "}
+                {videoCandidate.ratingAverage?.toFixed?.(1) ?? "—"} (
+                {videoCandidate.ratingCount ?? 0} reviews)
+              </div>
+              <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>
+                Prefers starting on FaceTime
+                {videoCandidate.campusOnly ? " • On-campus only" : ""}
+              </div>
+            </div>
+          </div>
+
+          {!videoConfirmed ? (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={handleFaceTimeConfirm}
+              >
+                Confirm this person
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={handleFaceTimeReject}
+              >
+                See someone else
+              </button>
+            </div>
+          ) : (
+           <div style={{ display: "flex", gap: 8 }}>
+            <a
+              className="btn btn--primary"
+              href={
+                videoCandidate.facetimeHandle
+                  ? `facetime:${videoCandidate.facetimeHandle}`
+                  : undefined
+              }
+              style={{ textAlign: "center", flex: 1 }}
+            >
+              FaceTime {videoCandidate.name}
+            </a>
+          </div>
+          )}
+        </div>  
+      )}
 
       {/* MATCH CARD */}
       {bestMatch && (

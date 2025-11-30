@@ -114,7 +114,7 @@ export default function HomeScreen() {
         <div className="home-secondary-actions">
           <button
             className="btn btn--ghost"
-            onClick={() => alert("Past journeys coming soon")}
+            onClick={() => navigate("/past-trips")}
           >
             Past journeys
           </button>

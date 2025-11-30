@@ -52,11 +52,11 @@ export default function LoginScreen({ initialMode = "signup" }) {
       if (!res.ok) {
         throw new Error(data.message || "Failed to sign in / sign up.");
       }
-
       // store token + user
       localStorage.setItem("ghs_token", data.token);
       localStorage.setItem("ghs_name", data.user.name);
       localStorage.setItem("ghs_phone", data.user.phone);
+      localStorage.setItem("ghs_user_id", data.user.id); 
 
       navigate("/home");
     } catch (err) {
