@@ -1,9 +1,11 @@
+// src/screens/GoogleMapLocationTest.jsx
 import { useEffect, useRef, useState } from "react";
 
 function loadGoogleMaps(apiKey) {
   return new Promise((resolve, reject) => {
     // Already loaded
     if (window.google?.maps) {
+      console.log("[GMaps] Already loaded");
       resolve(window.google.maps);
       return;
     }
@@ -11,12 +13,16 @@ function loadGoogleMaps(apiKey) {
     // Already loading
     const existingScript = document.querySelector("script[data-google-maps]");
     if (existingScript) {
-      existingScript.addEventListener("load", () => resolve(window.google.maps));
+      console.log("[GMaps] Script already on page, waiting for load");
+      existingScript.addEventListener("load", () =>
+        resolve(window.google.maps)
+      );
       existingScript.addEventListener("error", reject);
       return;
     }
 
-    // Create script tag with key FROM PARAM
+    console.log("[GMaps] Injecting script tag with key:", apiKey);
+
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
@@ -24,26 +30,33 @@ function loadGoogleMaps(apiKey) {
     script.dataset.googleMaps = "true";
 
     script.onload = () => {
+      console.log("[GMaps] script onload fired");
       if (window.google?.maps) {
         resolve(window.google.maps);
       } else {
-        reject(new Error("Google Maps SDK loaded but window.google.maps is undefined"));
+        reject(
+          new Error(
+            "Google Maps SDK loaded but window.google.maps is undefined"
+          )
+        );
       }
     };
 
-    script.onerror = (e) => reject(e);
+    script.onerror = (e) => {
+      console.error("[GMaps] script onerror", e);
+      reject(e);
+    };
 
     document.head.appendChild(script);
   });
 }
 
-
 export default function GoogleMapLocationTest() {
-  const mapRef = useRef(null);
-  const map = useRef(null);
-  const marker = useRef(null);
-  const circle = useRef(null);
-  const watchId = useRef(null);
+  const mapContainerRef = useRef(null); // the DIV we put the map in
+  const mapRef = useRef(null);          // the map instance
+  const markerRef = useRef(null);
+  const circleRef = useRef(null);
+  const watchIdRef = useRef(null);
 
   const [watching, setWatching] = useState(false);
   const [error, setError] = useState("");
@@ -57,22 +70,22 @@ export default function GoogleMapLocationTest() {
     const { latitude, longitude, accuracy } = pos.coords;
     const ll = { lat: latitude, lng: longitude };
 
-    if (!map.current || !window.google?.maps) return;
+    if (!mapRef.current || !window.google?.maps) return;
 
     // Marker
-    if (!marker.current) {
-      marker.current = new window.google.maps.Marker({
+    if (!markerRef.current) {
+      markerRef.current = new window.google.maps.Marker({
         position: ll,
-        map: map.current,
+        map: mapRef.current,
       });
     } else {
-      marker.current.setPosition(ll);
+      markerRef.current.setPosition(ll);
     }
 
     // Accuracy circle
-    if (!circle.current) {
-      circle.current = new window.google.maps.Circle({
-        map: map.current,
+    if (!circleRef.current) {
+      circleRef.current = new window.google.maps.Circle({
+        map: mapRef.current,
         center: ll,
         radius: accuracy,
         fillColor: "#b83990",
@@ -81,11 +94,11 @@ export default function GoogleMapLocationTest() {
         strokeOpacity: 0.6,
       });
     } else {
-      circle.current.setCenter(ll);
-      circle.current.setRadius(accuracy);
+      circleRef.current.setCenter(ll);
+      circleRef.current.setRadius(accuracy);
     }
 
-    map.current.panTo(ll);
+    mapRef.current.panTo(ll);
   };
 
   const onError = (e) => {
@@ -94,24 +107,28 @@ export default function GoogleMapLocationTest() {
   };
 
   const stopWatch = () => {
-    if (watchId.current) {
-      navigator.geolocation.clearWatch(watchId.current);
-      watchId.current = null;
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
     }
     setWatching(false);
   };
 
   const startWatch = () => {
-    if (watchId.current) return;
+    if (watchIdRef.current) return;
 
     if (!navigator.geolocation) {
       setError("Geolocation not supported.");
       return;
     }
 
-    watchId.current = navigator.geolocation.watchPosition(onSuccess, onError, {
-      enableHighAccuracy: true,
-    });
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      onSuccess,
+      onError,
+      {
+        enableHighAccuracy: true,
+      }
+    );
 
     setWatching(true);
   };
@@ -127,11 +144,15 @@ export default function GoogleMapLocationTest() {
 
     async function init() {
       try {
-        await loadGoogleMaps(apiKey);
+        const gmaps = await loadGoogleMaps(apiKey);
+        if (cancelled) return;
+        if (!mapContainerRef.current) {
+          console.error("[GMaps] mapContainerRef is null");
+          return;
+        }
 
-        if (!mapRef.current || cancelled) return;
-
-        map.current = new window.google.maps.Map(mapRef.current, {
+        console.log("[GMaps] Creating map on container:", mapContainerRef.current);
+        mapRef.current = new gmaps.Map(mapContainerRef.current, {
           center: { lat: 39.9526, lng: -75.1652 },
           zoom: 14,
           streetViewControl: false,
@@ -156,16 +177,28 @@ export default function GoogleMapLocationTest() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto", padding: 16 }}>
-      <h2 style={{ marginBottom: 12 }}>Live Location Test (Google Maps)</h2>
+    <div
+      style={{
+        height: "100vh",
+        maxWidth: 480,
+        margin: "0 auto",
+        padding: 16,
+        display: "flex",
+        flexDirection: "column",
+        background: "var(--bg)",
+      }}
+    >
+      <h2 style={{ marginBottom: 12, color: "var(--pink)" }}>
+        Live Location Test (Google Maps)
+      </h2>
 
       <button
         onClick={watching ? stopWatch : startWatch}
         style={{
           padding: "12px 18px",
           borderRadius: 12,
-          background: watching ? "#492642" : "#f5d7f2",
-          color: watching ? "#fff" : "#492642",
+          background: watching ? "#e52687" : "#f28dc0",
+          color: watching ? "#fff" : "#e52687",
           border: "none",
           fontSize: 16,
           cursor: "pointer",
@@ -176,17 +209,16 @@ export default function GoogleMapLocationTest() {
       </button>
 
       <div
-        ref={mapRef}
+        ref={mapContainerRef}
         style={{
-          width: "100%",
-          height: "60vh",
+          flex: 1,
           borderRadius: 12,
           background: "#eee",
         }}
       />
 
       {error && (
-        <div style={{ color: "#b00020", marginTop: 10 }}>
+        <div style={{ color: "#b00020", marginTop: 10, fontSize: 13 }}>
           {error}
         </div>
       )}

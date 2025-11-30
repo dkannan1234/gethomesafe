@@ -375,3 +375,225 @@ input {
 .guidelines {
   margin-top: 8px;
 }
+
+
+/* Phone frame from App.jsx */
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--bg);
+}
+
+.phone-frame {
+  width: 100%;
+  max-width: 480px;
+  height: 100vh;            /* phone-height container */
+  background: var(--bg);
+  border-radius: 32px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+}
+
+/* Journey screen fills the phone frame */
+.screen.screen--journey {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 16px;
+}
+
+/* main content under header: form + map */
+.journey-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden; /* so we don't scroll the whole screen */
+}
+
+/* form takes minimal vertical space */
+.journey-form {
+  flex-shrink: 0;
+}
+
+/* map card stretches to fill remaining space */
+.journey-map-card {
+  flex: 1;
+  padding: 10px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+/* actual Google Maps div */
+.journey-map-canvas {
+  flex: 1;
+  border-radius: 14px;
+  background: #eee;
+  overflow: hidden;
+}
+
+/* caption */
+.map-caption {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(229, 38, 135, 0.85);
+  margin: 8px 0 0;
+}
+
+/* ============================
+   LOCATION INPUT SCREEN
+============================ */
+
+/* LOCATION INPUT SCREEN LAYOUT TWEAKS */
+
+/* move form up slightly */
+.location-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;              /* was 12px — smaller gap moves map up */
+  min-height: 0;
+  margin-top: -10px;     /* nudges the whole block up */
+}
+
+/* slightly shrink padding in the form so it sits higher */
+.location-form {
+  flex-shrink: 0;
+  padding: 14px !important;    /* was 20px in card--padded */
+}
+
+/* give the map noticeably more height */
+.location-map-card {
+  flex: 1;                /* takes ALL remaining height */
+  min-height: 45vh;       /* ensures it's big even on small phones */
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+
+/* map itself takes all space inside its card */
+.location-map {
+  flex: 1;
+  min-height: 38vh;       /* boost actual map height */
+  border-radius: 14px;
+  background: #eee;
+  overflow: hidden;
+}
+
+/* smaller caption to prioritize map height */
+.location-caption {
+  margin: 6px 0 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Match screen specific layout: tighter so map fits */
+.match-screen {
+  padding-top: 12px;
+  padding-bottom: 8px;
+}
+
+/* Make header on match screen more compact */
+.match-screen .screen-header {
+  margin-bottom: 8px;
+}
+
+/* Slightly smaller title for space */
+.match-screen .screen-title {
+  font-size: 22px;
+}
+
+.match-screen .screen-subtitle {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+/* ============================
+   HOME SCREEN
+============================ */
+
+.home-screen {
+  justify-content: flex-start;
+  padding-top: 18px;
+}
+
+.home-hero {
+  margin-bottom: 16px;
+}
+
+.home-greeting {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: rgba(229, 38, 135, 0.85);
+}
+
+.home-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.35;
+  color: var(--pink);
+}
+
+.home-time {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.home-question {
+  margin-top: 10px;
+  margin-bottom: 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.home-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.home-primary-card {
+  margin-top: 4px;
+}
+
+.home-how {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(229, 38, 135, 0.12);
+}
+
+.home-how-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pink);
+}
+
+.home-how-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.68);
+  line-height: 1.5;
+}
+
+.home-secondary-actions {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.home-secondary-actions .btn--ghost {
+  flex: 1;
+  justify-content: center;
+  padding-inline: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+}

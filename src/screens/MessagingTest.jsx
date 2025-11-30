@@ -119,7 +119,7 @@ export default function MessagingTest() {
 
   return (
     <div style={ui.page}>
-      <h2 style={ui.h2}>Messaging Test (Two Devices)</h2>
+      <h2 style={ui.h2}>Message Your Buddy</h2>
 
       <div style={ui.card}>
         <div style={ui.row}>

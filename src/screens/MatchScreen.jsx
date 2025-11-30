@@ -10,19 +10,6 @@ import { db } from "../firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { haversineDistanceMeters } from "../utils/matching";
 
-const ui = {
-  page: { fontFamily: "var(--font-sans), system-ui, sans-serif", padding: 16 },
-  card: {
-    background: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    boxShadow: "0 8px 20px rgba(0,0,0,0.06)",
-    marginTop: 12,
-  },
-  h2: { fontSize: "clamp(20px, 4vw, 26px)", marginBottom: 4 },
-  meta: { fontSize: 13, color: "#555", marginTop: 4 },
-};
-
 function loadGoogleMaps(apiKey) {
   return new Promise((resolve, reject) => {
     if (window.google?.maps) {
@@ -110,7 +97,7 @@ export default function MatchScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // choose meeting point
+  // pick meeting point
   useEffect(() => {
     if (!myTrip || !bestMatch) return;
 
@@ -144,7 +131,7 @@ export default function MatchScreen() {
     chooseMeetingPoint().catch(console.error);
   }, [myTrip, bestMatch]);
 
-  // draw route with segments
+  // draw route with waypoints
   useEffect(() => {
     if (!myTrip || !meetingPoint || !apiKey) return;
 
@@ -267,63 +254,76 @@ export default function MatchScreen() {
 
   const handleAccept = () => {
     setAccepted(true);
-    // You can later: update trip in Firestore as "matched"
+    // TODO: update Firestore to mark as matched
   };
 
   const handleMessage = () => {
+    if (!accepted) return;
     navigate("/messages");
   };
 
+  const handleCall = (e) => {
+    if (!accepted) {
+      e.preventDefault();
+      return;
+    }
+    if (!bestMatch?.user?.phone) {
+      e.preventDefault();
+      alert("Phone number not set up yet.");
+    }
+  };
+
+  const hasMatch = !!bestMatch;
+
+  const headerTitle = hasMatch
+    ? "We found someone for you"
+    : "Finding your match…";
+
+  const headerSubtitle = hasMatch
+    ? "Confirm your match and we’ll guide you both to a safe meeting spot."
+    : "We’re looking for people walking or taking transit along a similar route.";
+
   return (
-    <div style={ui.page}>
-      {/* LOADING HEADER */}
+    <div className="screen match-screen">
+      {/* HEADER */}
       <header className="screen-header">
-        <h1 className="screen-title">Finding your match…</h1>
-        <p className="screen-subtitle">
-          We’re looking for people walking or taking transit along a similar route.
-        </p>
+        <h1 className="screen-title">{headerTitle}</h1>
+        <p className="screen-subtitle">{headerSubtitle}</p>
       </header>
 
+      {/* refresh */}
       <button
         className="btn btn--ghost"
         onClick={loadMatch}
         disabled={loading}
+        style={{ marginBottom: 6 }}
       >
         {loading ? "Looking for friends near you…" : "Refresh match"}
       </button>
 
-      {error && (
-        <div style={{ ...ui.meta, color: "#b00020", marginTop: 8 }}>{error}</div>
-      )}
+      {error && <div className="error">{error}</div>}
 
-      {myTrip && (
-        <div style={ui.card}>
-          <strong>Your trip</strong>
-          <div style={ui.meta}>
-            From: {myTrip.origin?.text || "?"}
-            <br />
-            To: {myTrip.destination?.text || "?"}
-          </div>
-        </div>
-      )}
-
+      {/* MATCH CARD */}
       {bestMatch && (
-        <div style={ui.card}>
-          <strong>Your match</strong>
-          <div style={{ marginTop: 8, display: "flex", gap: 12 }}>
-            {/* fake profile circle */}
+        <div className="card card--padded" style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>
+            Your match
+          </div>
+
+          <div style={{ marginTop: 2, display: "flex", gap: 12 }}>
+            {/* profile bubble */}
             <div
               style={{
-                width: 56,
-                height: 56,
+                width: 52,
+                height: 52,
                 borderRadius: "50%",
                 background:
-                  "linear-gradient(135deg, var(--color-light-pink), var(--color-dark-pink))",
+                  "linear-gradient(135deg, var(--pink-soft), var(--pink))",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 color: "#fff",
-                fontWeight: 600,
+                fontWeight: 700,
                 fontSize: 20,
               }}
             >
@@ -331,82 +331,156 @@ export default function MatchScreen() {
             </div>
 
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>
-                {bestMatch.user.name}, {bestMatch.user.age}
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: "var(--pink)",
+                }}
+              >
+                {bestMatch.user.name}
+                {bestMatch.user.age ? `, ${bestMatch.user.age}` : ""}
               </div>
-              <div style={ui.meta}>
-                Rating: {bestMatch.user.ratingAverage?.toFixed(1) ?? "—"} ⭐ (
-                {bestMatch.user.ratingCount ?? 0} reviews)
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "rgba(0,0,0,0.55)",
+                  marginTop: 2,
+                }}
+              >
+                Rating:{" "}
+                {bestMatch.user.ratingAverage != null
+                  ? `${bestMatch.user.ratingAverage.toFixed(1)} ⭐`
+                  : "—"}{" "}
+                ({bestMatch.user.ratingCount ?? 0} reviews)
               </div>
-              <div style={{ ...ui.meta, marginTop: 6 }}>
-                Heading from <strong>{bestMatch.trip.origin?.text || "?"}</strong>{" "}
-                toward <strong>{bestMatch.trip.destination?.text || "?"}</strong>.
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "rgba(0,0,0,0.7)",
+                  marginTop: 6,
+                  lineHeight: 1.4,
+                }}
+              >
+                They’re heading from{" "}
+                <strong>{bestMatch.trip.origin?.text || "?"}</strong> toward{" "}
+                <strong>{bestMatch.trip.destination?.text || "?"}</strong>.
               </div>
             </div>
           </div>
 
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <button
-              className="btn btn--secondary"
-              onClick={handleAccept}
-            >
-              {accepted ? "Match confirmed" : "Confirm match"}
-            </button>
+          {/* ACTIONS */}
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            {!accepted && (
+              <button
+                type="button"
+                className="btn btn--primary btn--full"
+                onClick={handleAccept}
+              >
+                Confirm my match
+              </button>
+            )}
 
-            {/* Call my match — placeholder link for now */}
-            <a
-              className="btn btn--ghost"
-              href="tel:5555555555"
-              onClick={(e) => {
-                if (!bestMatch.user.phone) {
-                  e.preventDefault();
-                  alert("Phone number not set up yet.");
-                }
-              }}
-            >
-              Call my match
-            </a>
+            {accepted && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--full"
+                  onClick={handleMessage}
+                >
+                  Message my match
+                </button>
 
-            <button className="btn btn--ghost" onClick={handleMessage}>
-              Message
-            </button>
-          </div>
-
-          <div style={{ ...ui.meta, marginTop: 8 }}>
-            We never share your live location. You can choose to meet at the
-            suggested safe spot or just call / FaceTime while you walk.
+                <a
+                  className="btn btn--ghost btn--full"
+                  href={
+                    bestMatch.user.phone
+                      ? `tel:${bestMatch.user.phone}`
+                      : "tel:5555555555"
+                  }
+                  onClick={handleCall}
+                  style={{ textAlign: "center" }}
+                >
+                  Call my match
+                </a>
+              </>
+            )}
           </div>
         </div>
       )}
 
+      {/* ROUTE CARD */}
       {myTrip && meetingPoint && (
-        <div style={ui.card}>
-          <strong>Your route</strong>
+        <div className="card card--padded" style={{ marginTop: 10 }}>
+          <div
+            style={{
+              fontSize: 13,
+              opacity: 0.8,
+              marginBottom: 4,
+            }}
+          >
+            Your route & meeting point
+          </div>
+
+          <div
+            style={{
+              fontSize: 13,
+              marginBottom: 4,
+              color: "var(--pink)",
+              fontWeight: 600,
+            }}
+          >
+            Your meeting point is:{" "}
+            <span style={{ fontWeight: 800 }}>
+              {meetingPoint.name || "a safe nearby spot"}
+            </span>
+          </div>
+
+          {meetingPoint.address && (
+            <div
+              style={{
+                fontSize: 11,
+                marginBottom: 6,
+                color: "rgba(0,0,0,0.7)",
+              }}
+            >
+              {meetingPoint.address}
+            </div>
+          )}
+
           <div
             ref={mapDivRef}
             style={{
               width: "100%",
-              height: "45vh",
+              height: "38vh", // smaller so it fits
               borderRadius: 14,
               background: "#eee",
-              marginTop: 10,
-              marginBottom: 8,
+              marginTop: 4,
+              marginBottom: 6,
               overflow: "hidden",
             }}
           />
+
           <div
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 4,
-              fontSize: 12,
-              color: "#555",
+              gap: 3,
+              fontSize: 11,
+              color: "rgba(0,0,0,0.7)",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span
                 style={{
-                  width: 20,
+                  width: 18,
                   height: 4,
                   borderRadius: 999,
                   background: "#b83990",
@@ -417,20 +491,26 @@ export default function MatchScreen() {
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span
                 style={{
-                  width: 20,
+                  width: 18,
                   height: 4,
                   borderRadius: 999,
                   background: "#492642",
                 }}
               />
-              <span>Meeting point → destination (shared)</span>
+              <span>Meeting point → destination (together)</span>
             </div>
           </div>
 
-          <div style={{ ...ui.meta, marginTop: 6 }}>
-            You start from <strong>{myTrip.origin?.text}</strong>, meet at{" "}
-            <strong>{meetingPoint.name}</strong>, then continue to{" "}
-            <strong>{myTrip.destination?.text}</strong>.
+          <div
+            style={{
+              fontSize: 11,
+              color: "rgba(0,0,0,0.7)",
+              marginTop: 4,
+              lineHeight: 1.35,
+            }}
+          >
+            
+
           </div>
         </div>
       )}

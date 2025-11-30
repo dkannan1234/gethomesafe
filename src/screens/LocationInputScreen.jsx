@@ -1,24 +1,29 @@
+// src/screens/LocationInputScreen.jsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebaseClient";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
-
-
-// Plain helper: NO hooks here
+// ---- Google Maps loader (same pattern as the working test) ----
 function loadGoogleMaps(apiKey) {
   return new Promise((resolve, reject) => {
     if (window.google?.maps) {
+      console.log("[LocationInput] Google Maps already loaded");
       resolve(window.google.maps);
       return;
     }
 
     const existingScript = document.querySelector("script[data-google-maps]");
     if (existingScript) {
-      existingScript.addEventListener("load", () => resolve(window.google.maps));
+      console.log("[LocationInput] Waiting on existing Maps script");
+      existingScript.addEventListener("load", () =>
+        resolve(window.google.maps)
+      );
       existingScript.addEventListener("error", reject);
       return;
     }
+
+    console.log("[LocationInput] Injecting Maps script with key:", apiKey);
 
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
@@ -30,7 +35,9 @@ function loadGoogleMaps(apiKey) {
       if (window.google?.maps) {
         resolve(window.google.maps);
       } else {
-        reject(new Error("Google Maps SDK loaded but window.google.maps is undefined"));
+        reject(
+          new Error("Google Maps SDK loaded but window.google.maps is undefined")
+        );
       }
     };
 
@@ -41,38 +48,40 @@ function loadGoogleMaps(apiKey) {
 }
 
 export default function LocationInputScreen({ onContinue }) {
-  const mapDivRef = useRef(null);
-  const mapRef = useRef(null);
-  const directionsServiceRef = useRef(null);
-  const directionsRendererRef = useRef(null);
   const navigate = useNavigate();
-
   const currentUserId = localStorage.getItem("ghs_user_id");
 
+  // Map refs
+  const mapDivRef = useRef(null);      // container div
+  const mapRef = useRef(null);         // map instance
+  const directionsServiceRef = useRef(null);
+  const directionsRendererRef = useRef(null);
+
+  // Autocomplete refs
   const originInputRef = useRef(null);
   const destInputRef = useRef(null);
   const originAutocompleteRef = useRef(null);
   const destAutocompleteRef = useRef(null);
 
+  // State
   const [mapsReady, setMapsReady] = useState(false);
 
   const [originCoords, setOriginCoords] = useState(null); // {lat, lng}
-  const [originAddress, setOriginAddress] = useState(""); // human-readable
+  const [originAddress, setOriginAddress] = useState("");
   const [locError, setLocError] = useState("");
 
   const [destCoords, setDestCoords] = useState(null);
   const [destAddress, setDestAddress] = useState("");
 
   const [routeError, setRouteError] = useState("");
-
-  // NEW: route + button state
-  const [routeReady, setRouteReady] = useState(false);   // has route been drawn?
-  const [isRouting, setIsRouting] = useState(false);     // doing directions call
-  const [isSavingTrip, setIsSavingTrip] = useState(false); // writing to Firestore
+  const [routeReady, setRouteReady] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
+  const [isSavingTrip, setIsSavingTrip] = useState(false);
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
+  console.log("[LocationInput] VITE_GOOGLE_MAPS_KEY:", apiKey);
 
-  // 1) Load Google Maps JS and initialize map + autocomplete
+  // 1) Load Google Maps + set up map & autocomplete
   useEffect(() => {
     if (!apiKey) {
       setRouteError("Missing Google Maps API key.");
@@ -85,8 +94,12 @@ export default function LocationInputScreen({ onContinue }) {
       try {
         const gmaps = await loadGoogleMaps(apiKey);
         if (cancelled) return;
+        if (!mapDivRef.current) {
+          console.error("[LocationInput] mapDivRef is null");
+          return;
+        }
 
-        // Map
+        console.log("[LocationInput] Creating map instance");
         mapRef.current = new gmaps.Map(mapDivRef.current, {
           center: { lat: 39.9526, lng: -75.1652 },
           zoom: 13,
@@ -95,21 +108,19 @@ export default function LocationInputScreen({ onContinue }) {
           fullscreenControl: false,
         });
 
-        // Directions
         directionsServiceRef.current = new gmaps.DirectionsService();
         directionsRendererRef.current = new gmaps.DirectionsRenderer({
           map: mapRef.current,
           suppressMarkers: false,
         });
 
-        // Autocomplete on origin input
+        // Origin autocomplete
         if (originInputRef.current) {
           const ac = new gmaps.places.Autocomplete(originInputRef.current, {
             fields: ["formatted_address", "geometry", "name"],
             types: ["geocode"],
           });
           originAutocompleteRef.current = ac;
-
           ac.addListener("place_changed", () => {
             const place = ac.getPlace();
             if (!place.geometry || !place.geometry.location) return;
@@ -121,14 +132,13 @@ export default function LocationInputScreen({ onContinue }) {
           });
         }
 
-        // Autocomplete on destination input
+        // Destination autocomplete
         if (destInputRef.current) {
           const ac = new gmaps.places.Autocomplete(destInputRef.current, {
             fields: ["formatted_address", "geometry", "name"],
             types: ["geocode"],
           });
           destAutocompleteRef.current = ac;
-
           ac.addListener("place_changed", () => {
             const place = ac.getPlace();
             if (!place.geometry || !place.geometry.location) return;
@@ -141,7 +151,7 @@ export default function LocationInputScreen({ onContinue }) {
 
         setMapsReady(true);
       } catch (err) {
-        console.error("Error loading Google Maps:", err);
+        console.error("[LocationInput] Error loading Google Maps:", err);
         if (!cancelled) setRouteError("Failed to load Google Maps.");
       }
     }
@@ -153,7 +163,7 @@ export default function LocationInputScreen({ onContinue }) {
     };
   }, [apiKey]);
 
-  // 2) Get current GPS position and reverse geocode to a human address
+  // 2) Get current GPS position and reverse geocode
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocError("Geolocation not supported in this browser.");
@@ -161,13 +171,12 @@ export default function LocationInputScreen({ onContinue }) {
     }
 
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      (pos) => {
         const { latitude, longitude } = pos.coords;
         const coords = { lat: latitude, lng: longitude };
         setOriginCoords(coords);
         setLocError("");
 
-        // Only reverse geocode once Maps is ready
         if (!window.google?.maps) return;
 
         try {
@@ -177,39 +186,39 @@ export default function LocationInputScreen({ onContinue }) {
               const addr = results[0].formatted_address;
               setOriginAddress(addr);
 
-              // Prefill the origin input if empty
               if (originInputRef.current && !originInputRef.current.value) {
                 originInputRef.current.value = addr;
               }
 
-              // Center map on user
               if (mapRef.current) {
                 mapRef.current.setCenter(coords);
                 mapRef.current.setZoom(15);
               }
             } else {
-              console.warn("Reverse geocode failed:", status);
+              console.warn("[LocationInput] Reverse geocode failed:", status);
             }
           });
         } catch (err) {
-          console.error("Reverse geocoding error:", err);
+          console.error("[LocationInput] Reverse geocoding error:", err);
         }
       },
       (err) => {
-        console.error("Geolocation error:", err);
-        setLocError("Could not fetch current location. You can enter a start address manually.");
+        console.error("[LocationInput] Geolocation error:", err);
+        setLocError(
+          "Could not fetch current location. You can enter a start address manually."
+        );
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, []);
 
-  // 3) Bias autocomplete to user's area once we know origin coords
+  // 3) Bias autocomplete to user area
   useEffect(() => {
     if (!originCoords || !window.google?.maps) return;
     const gmaps = window.google.maps;
     const circle = new gmaps.Circle({
       center: originCoords,
-      radius: 5000, // 5km radius bias
+      radius: 5000,
     });
 
     const bounds = circle.getBounds();
@@ -223,7 +232,8 @@ export default function LocationInputScreen({ onContinue }) {
     }
   }, [originCoords]);
 
-  // Helper: compute + draw the route
+  // --- routing + trip creation ---
+
   const showRoute = () => {
     setRouteError("");
     setRouteReady(false);
@@ -266,36 +276,23 @@ export default function LocationInputScreen({ onContinue }) {
         setIsRouting(false);
 
         if (status !== "OK" || !result) {
-          console.error("Directions request failed:", status);
+          console.error("[LocationInput] Directions request failed:", status);
           setRouteError("Could not compute route between these points.");
           return;
         }
 
-        // Draw route on map
         directionsRendererRef.current.setDirections(result);
-        if (
-          result.routes &&
-          result.routes[0] &&
-          result.routes[0].bounds &&
-          mapRef.current
-        ) {
+        if (result.routes?.[0]?.bounds && mapRef.current) {
           mapRef.current.fitBounds(result.routes[0].bounds);
         }
 
-        // Lift data up if parent cares
         const originText = originInputVal || originAddress || "";
         const destText = destAddress || destInputVal;
 
         if (onContinue) {
           onContinue({
-            origin: {
-              coords: originCoords || null,
-              text: originText,
-            },
-            destination: {
-              coords: destCoords || null,
-              text: destText,
-            },
+            origin: { coords: originCoords || null, text: originText },
+            destination: { coords: destCoords || null, text: destText },
             directions: result,
           });
         }
@@ -305,7 +302,6 @@ export default function LocationInputScreen({ onContinue }) {
     );
   };
 
-  // Helper: create trip + navigate to match screen
   const createTripAndNavigate = async () => {
     setRouteError("");
 
@@ -337,9 +333,7 @@ export default function LocationInputScreen({ onContinue }) {
           lng: destCoords?.lng ?? null,
         },
         plannedStartTime: new Date().toISOString(),
-        plannedEndTime: new Date(
-          Date.now() + 60 * 60 * 1000
-        ).toISOString(),
+        plannedEndTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         status: "searching",
         activeMatchId: null,
         excludedUserIds: [],
@@ -349,28 +343,23 @@ export default function LocationInputScreen({ onContinue }) {
 
       navigate(`/match/${docRef.id}`);
     } catch (err) {
-      console.error("Failed to create trip:", err);
+      console.error("[LocationInput] Failed to create trip:", err);
       setRouteError("Trip save failed. Try again.");
     } finally {
       setIsSavingTrip(false);
     }
   };
 
-  // Single button: first click = show route, second click = create trip
   const handlePrimaryClick = (e) => {
     e.preventDefault();
-
     if (!routeReady) {
-      // First phase: just draw the route
       showRoute();
     } else {
-      // Second phase: route already visible → save + match
       createTripAndNavigate();
     }
   };
 
   const isBusy = isRouting || isSavingTrip;
-
   const buttonLabel = !routeReady
     ? isRouting
       ? "Calculating route..."
@@ -379,67 +368,22 @@ export default function LocationInputScreen({ onContinue }) {
     ? "Finding your match..."
     : "Find me a match";
 
+  // ---- UI (no scrolling: header + form + map all inside the phone frame) ----
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
-        background: "linear-gradient(180deg, #f5d7f2, #fefefe)",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 480,
-          padding: "24px 16px 40px",
-          fontFamily: "var(--font-sans, system-ui, sans-serif)",
-        }}
-      >
-        <header style={{ marginBottom: 16 }}>
-          <h1
-            style={{
-              fontSize: "clamp(24px, 5vw, 28px)",
-              margin: 0,
-              color: "#492642",
-            }}
-          >
-            Start a new journey
-          </h1>
-          <p
-            style={{
-              marginTop: 8,
-              fontSize: 14,
-              color: "#4b3b48",
-            }}
-          >
-            Enter your route so we can show your path and then find people heading the same way.
-          </p>
-        </header>
+    <div className="screen location-screen">
+      <header className="screen-header">
+        <h1 className="screen-title">Where are you going?</h1>
+        <p className="screen-subtitle">
+          Enter your route so we can show your path and then find people heading
+          the same way.
+        </p>
+      </header>
 
-        <form
-          onSubmit={handlePrimaryClick}
-          style={{
-            background: "#ffffff",
-            borderRadius: 20,
-            padding: 16,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-            marginBottom: 16,
-          }}
-        >
-          {/* START / ORIGIN */}
-          <section style={{ marginBottom: 16 }}>
-            <label
-              htmlFor="origin-input"
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#59455a",
-                display: "block",
-                marginBottom: 6,
-              }}
-            >
+      <div className="location-main">
+        {/* top card with fields + button */}
+        <form className="card card--padded location-form" onSubmit={handlePrimaryClick}>
+          <section className="field">
+            <label className="field-label" htmlFor="origin-input">
               Start
             </label>
             <input
@@ -448,41 +392,25 @@ export default function LocationInputScreen({ onContinue }) {
               type="text"
               placeholder="Use current location or type an address"
               autoComplete="off"
-              style={{
-                width: "100%",
-                fontSize: 15,
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #e0d1e5",
-                outline: "none",
-              }}
+              className="field-input"
             />
-            {/* Show the resolved current address explicitly */}
             {originAddress && (
-              <div style={{ marginTop: 6, fontSize: 12, color: "#6b5b70" }}>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: "rgba(229, 38, 135, 0.8)",
+                }}
+              >
                 Using current location:{" "}
-                <span style={{ fontWeight: 500 }}>{originAddress}</span>
+                <span style={{ fontWeight: 600 }}>{originAddress}</span>
               </div>
             )}
-            {locError && (
-              <div style={{ marginTop: 6, fontSize: 12, color: "#b00020" }}>
-                {locError}
-              </div>
-            )}
+            {locError && <div className="error">{locError}</div>}
           </section>
 
-          {/* DESTINATION */}
-          <section style={{ marginBottom: 16 }}>
-            <label
-              htmlFor="destination-input"
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#59455a",
-                display: "block",
-                marginBottom: 6,
-              }}
-            >
+          <section className="field">
+            <label className="field-label" htmlFor="destination-input">
               Destination
             </label>
             <input
@@ -491,80 +419,28 @@ export default function LocationInputScreen({ onContinue }) {
               type="text"
               placeholder="Where do you want to end up?"
               autoComplete="off"
-              style={{
-                width: "100%",
-                fontSize: 15,
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #e0d1e5",
-                outline: "none",
-              }}
+              className="field-input"
             />
           </section>
 
-          {/* SINGLE SMART BUTTON */}
           <button
             type="submit"
+            className="btn btn--primary btn--full"
             disabled={isBusy}
-            style={{
-              width: "100%",
-              padding: "12px 16px",
-              borderRadius: 999,
-              border: "none",
-              fontSize: 16,
-              fontWeight: 600,
-              cursor: !isBusy ? "pointer" : "default",
-              background: !routeReady
-                ? !isBusy
-                  ? "#492642"
-                  : "#cbb6d0"
-                : !isBusy
-                ? "#f5d7f2"
-                : "#e0d1e5",
-              color: !routeReady ? "#fff" : "#492642",
-              transition: "background 0.15s ease",
-            }}
           >
             {buttonLabel}
           </button>
 
-          {routeError && (
-            <div style={{ marginTop: 8, fontSize: 12, color: "#b00020" }}>
-              {routeError}
-            </div>
-          )}
+          {routeError && <div className="error">{routeError}</div>}
         </form>
 
-        {/* MAP + EXPLANATORY TEXT */}
-        <div
-          style={{
-            background: "#ffffff",
-            borderRadius: 20,
-            padding: 12,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.04)",
-          }}
-        >
-          <div
-            ref={mapDivRef}
-            style={{
-              width: "100%",
-              height: "50vh",
-              borderRadius: 14,
-              background: "#eee",
-              marginBottom: 10,
-              overflow: "hidden",
-            }}
-          />
-          <p
-            style={{
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: "#7a6a80",
-              margin: 0,
-            }}
-          >
-            First we’ll show your walking route from where you are. Once it looks right, tap
-            “Find me a match” to look for people heading along a similar path.
+        {/* map card fills the rest of the phone frame */}
+        <div className="card location-map-card">
+          <div ref={mapDivRef} className="location-map" />
+          <p className="location-caption">
+            First we’ll show your walking route from where you are. Once it looks
+            right, tap “Find me a match” to look for people heading along a
+            similar path.
           </p>
         </div>
       </div>
