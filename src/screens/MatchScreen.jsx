@@ -6,7 +6,7 @@ import {
   findCandidateMatchesForTrip,
   excludeUserForTrip,
 } from "../services/matchingService";
-import { fetchUser, rateUser } from "../services/userService";
+import { fetchUser } from "../services/userService";
 import { db } from "../firebaseClient";
 import {
   collection,
@@ -60,7 +60,6 @@ export default function MatchScreen() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoConfirmed, setVideoConfirmed] = useState(false);
 
-  // rating state
   const [showRating, setShowRating] = useState(false);
   const [selectedRating, setSelectedRating] = useState(0);
   const [submittingRating, setSubmittingRating] = useState(false);
@@ -89,17 +88,15 @@ export default function MatchScreen() {
     setLoading(true);
     setError("");
 
-    // When we refresh candidates, reset map so Google Maps re-attaches cleanly
     resetMapState();
     setBestMatch(null);
     setMeetingPoint(null);
-    // Do NOT reset accepted here – for an already matched trip we restore from Firestore
 
     try {
       const my = await fetchTrip(tripId);
       setMyTrip(my);
 
-      // If this trip was already matched, restore that match
+      // If already matched, restore existing match
       if (my.status === "matched" && my.activeMatchUserId) {
         setAccepted(true);
 
@@ -118,7 +115,7 @@ export default function MatchScreen() {
           };
         }
 
-        // Try to find a trip for the other user (to show where they're heading)
+        // Try to get their trip for more detail
         let otherTrip = null;
         try {
           const tripsCol = collection(db, "trips");
@@ -133,7 +130,7 @@ export default function MatchScreen() {
           }
         } catch (e) {
           console.warn(
-            "[MatchScreen] could not fetch other user's trip for existing match:",
+            "[MatchScreen] could not fetch other user's trip:",
             e
           );
         }
@@ -154,7 +151,7 @@ export default function MatchScreen() {
         return;
       }
 
-      // Normal search flow
+      // Normal match search
       const candidates = await findCandidateMatchesForTrip(my, {
         maxResults: 3,
         minScore: 0.2,
@@ -197,6 +194,7 @@ export default function MatchScreen() {
     }
   };
 
+  // FaceTime-first helper people (optional feature)
   const loadVideoCandidate = async () => {
     if (!myTrip) {
       setError("Your trip is still loading – please try again in a moment.");
@@ -235,15 +233,11 @@ export default function MatchScreen() {
     }
   };
 
-  const handleFaceTimeClick = () => {
-    loadVideoCandidate();
-  };
-
+  const handleFaceTimeClick = () => loadVideoCandidate();
   const handleFaceTimeConfirm = () => {
     if (!videoCandidate) return;
     setVideoConfirmed(true);
   };
-
   const handleFaceTimeReject = () => {
     if (!videoCandidate) return;
     setVideoExcludedIds((prev) => [...prev, videoCandidate.id]);
@@ -258,7 +252,7 @@ export default function MatchScreen() {
 
   const isVirtual = myTrip?.matchMode === "virtual_only";
 
-  // pick meeting point (in-person only)
+  /* Choose meeting point (in-person only) */
   useEffect(() => {
     if (!myTrip || !bestMatch || isVirtual) return;
 
@@ -292,7 +286,7 @@ export default function MatchScreen() {
     chooseMeetingPoint().catch(console.error);
   }, [myTrip, bestMatch, isVirtual]);
 
-  // draw route with waypoints (in-person)
+  /* Draw route with waypoints (in-person) */
   useEffect(() => {
     if (!myTrip || !meetingPoint || !apiKey || isVirtual) return;
 
@@ -358,7 +352,7 @@ export default function MatchScreen() {
 
             const prePolyline = new gmaps.Polyline({
               path: prePath,
-              strokeColor: "#b83990",
+              strokeColor: "#e52687",
               strokeOpacity: 0.95,
               strokeWeight: 5,
               map: mapRef.current,
@@ -374,22 +368,57 @@ export default function MatchScreen() {
 
             routeSegmentsRef.current = { pre: prePolyline, post: postPolyline };
 
+            // Clear old markers
             Object.values(markersRef.current).forEach((m) => m?.setMap(null));
+
+            const youIcon = {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#e52687",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            };
+
+            const meetIcon = {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 9,
+              fillColor: "#ffffff",
+              fillOpacity: 1,
+              strokeColor: "#e52687",
+              strokeWeight: 2,
+            };
+
+            const destIcon = {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#f28dc0",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            };
 
             const originMarker = new gmaps.Marker({
               position: { lat: origin.lat, lng: origin.lng },
               map: mapRef.current,
-              label: "A",
+              icon: youIcon,
+              title: "You",
             });
+
             const meetingMarker = new gmaps.Marker({
               position: { lat: meetingPoint.lat, lng: meetingPoint.lng },
               map: mapRef.current,
-              label: "M",
+              icon: meetIcon,
+              title: bestMatch?.user?.name
+                ? `Meeting spot with ${bestMatch.user.name}`
+                : "Meeting spot with your buddy",
             });
+
             const destMarker = new gmaps.Marker({
               position: { lat: destination.lat, lng: destination.lng },
               map: mapRef.current,
-              label: "B",
+              icon: destIcon,
+              title: "Your destination",
             });
 
             markersRef.current = {
@@ -414,9 +443,9 @@ export default function MatchScreen() {
     return () => {
       cancelled = true;
     };
-  }, [myTrip, meetingPoint, apiKey, isVirtual]);
+  }, [myTrip, meetingPoint, apiKey, isVirtual, bestMatch]);
 
-  // draw simple route (virtual – just your own path)
+  /* Draw simple route (virtual – just your route) */
   useEffect(() => {
     if (!myTrip || !apiKey || !isVirtual) return;
 
@@ -475,7 +504,7 @@ export default function MatchScreen() {
 
             const polyline = new gmaps.Polyline({
               path,
-              strokeColor: "#b83990",
+              strokeColor: "#e52687",
               strokeOpacity: 0.95,
               strokeWeight: 5,
               map: mapRef.current,
@@ -485,15 +514,35 @@ export default function MatchScreen() {
 
             Object.values(markersRef.current).forEach((m) => m?.setMap(null));
 
+            const youIcon = {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#e52687",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            };
+
+            const destIcon = {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#f28dc0",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            };
+
             const originMarker = new gmaps.Marker({
               position: { lat: origin.lat, lng: origin.lng },
               map: mapRef.current,
-              label: "A",
+              icon: youIcon,
+              title: "You",
             });
             const destMarker = new gmaps.Marker({
               position: { lat: destination.lat, lng: destination.lng },
               map: mapRef.current,
-              label: "B",
+              icon: destIcon,
+              title: "Your destination",
             });
 
             markersRef.current = {
@@ -523,7 +572,7 @@ export default function MatchScreen() {
     if (!myTrip || !bestMatch) return;
 
     setAccepted(true);
-    setShowRating(false); // hide rating until they explicitly finish
+    setShowRating(false);
 
     try {
       const userId = myTrip.userId;
@@ -543,7 +592,7 @@ export default function MatchScreen() {
         activeMatchUserId: otherUserId,
       });
     } catch (err) {
-      console.error("[MatchScreen] Failed to save trip to server:", err);
+      console.error("[MatchScreen] Failed to save trip:", err);
     }
   };
 
@@ -598,8 +647,6 @@ export default function MatchScreen() {
     setError("");
 
     try {
-      // Optionally still mark the trip as completed in Firestore,
-      // but no rating is written anywhere.
       if (myTrip) {
         const tripRef = doc(db, "trips", myTrip.id);
         await updateDoc(tripRef, {
@@ -608,7 +655,6 @@ export default function MatchScreen() {
         });
       }
     } catch (err) {
-      // We don't surface any error to the user – they should think it succeeded.
       console.error("[MatchScreen] finish walk error (ignored):", err);
     } finally {
       setSubmittingRating(false);
@@ -637,28 +683,38 @@ export default function MatchScreen() {
   return (
     <div className="screen match-screen">
       {/* HEADER */}
-      <header className="screen-header">
+      <header className="screen-header match-header">
+      <button
+        type="button"
+        className="match-back-btn"
+        onClick={() => navigate(-1)}   // or () => navigate("/journey") if you prefer
+      >
+        ← Back to journey
+      </button>
+
+      <div className="match-header-text">
         <h1 className="screen-title">{headerTitle}</h1>
         <p className="screen-subtitle">{headerSubtitle}</p>
-      </header>
+      </div>
+    </header>
 
-      {/* refresh (only while browsing candidates) */}
+
+      {/* REFRESH BUTTON */}
       {!accepted && (
         <button
-          className="btn btn--ghost"
+          className="btn match-refresh-btn"
           onClick={loadMatch}
           disabled={loading}
-          style={{ marginBottom: 6 }}
         >
           {loading ? "Looking for friends near you…" : "Refresh match"}
         </button>
       )}
 
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" style={{ marginTop: 6 }}>{error}</div>}
 
-      {/* FaceTime fallback when pair is loading or missing */}
+      {/* FACE TIME OPTIONAL CARD */}
       {!accepted && (loading || !bestMatch) && (
-        <div style={{ marginTop: 8 }}>
+        <div className="match-card">
           <button
             type="button"
             className="btn btn--primary btn--full"
@@ -673,35 +729,20 @@ export default function MatchScreen() {
       )}
 
       {videoCandidate && !accepted && (
-        <div className="card card--padded" style={{ marginTop: 10 }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: "50%",
-                background: "var(--color-dark-purple)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: 20,
-              }}
-            >
+        <div className="match-card">
+          <div className="match-face-row">
+            <div className="match-avatar">
               {videoCandidate.name?.[0] || "U"}
             </div>
 
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>
-                {videoCandidate.name}
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.8 }}>
+            <div className="match-face-info">
+              <div className="match-face-name">{videoCandidate.name}</div>
+              <div className="match-face-meta">
                 {videoCandidate.pronouns} • Rating{" "}
                 {videoCandidate.ratingAverage?.toFixed?.(1) ?? "—"} (
                 {videoCandidate.ratingCount ?? 0} reviews)
               </div>
-              <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>
+              <div className="match-face-tagline">
                 Prefers starting on FaceTime
                 {videoCandidate.campusOnly ? " • On-campus only" : ""}
               </div>
@@ -709,7 +750,7 @@ export default function MatchScreen() {
           </div>
 
           {!videoConfirmed ? (
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <div className="match-face-actions">
               <button
                 type="button"
                 className="btn btn--primary"
@@ -726,15 +767,14 @@ export default function MatchScreen() {
               </button>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="match-face-actions">
               <a
-                className="btn btn--primary"
+                className="btn btn--primary btn--full"
                 href={
                   videoCandidate.facetimeHandle
                     ? `facetime:${videoCandidate.facetimeHandle}`
                     : undefined
                 }
-                style={{ textAlign: "center", flex: 1 }}
               >
                 FaceTime {videoCandidate.name}
               </a>
@@ -745,49 +785,20 @@ export default function MatchScreen() {
 
       {/* MATCH CARD */}
       {bestMatch && (
-        <div className="card card--padded" style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>
-            Your match
-          </div>
+        <div className="match-card">
+          <div className="match-card-label">Your match</div>
 
-          <div style={{ marginTop: 2, display: "flex", gap: 12 }}>
-            {/* profile bubble */}
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background:
-                  "linear-gradient(135deg, var(--pink-soft), var(--pink))",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: 20,
-              }}
-            >
+          <div className="match-main-row">
+            <div className="match-avatar">
               {bestMatch.user.name?.[0] || "G"}
             </div>
 
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "var(--pink)",
-                }}
-              >
+            <div className="match-main-info">
+              <div className="match-main-name">
                 {bestMatch.user.name}
                 {bestMatch.user.age ? `, ${bestMatch.user.age}` : ""}
               </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "rgba(0,0,0,0.55)",
-                  marginTop: 2,
-                }}
-              >
+              <div className="match-main-meta">
                 Rating:{" "}
                 {bestMatch.user.ratingAverage != null
                   ? `${bestMatch.user.ratingAverage.toFixed(1)} ⭐`
@@ -796,26 +807,10 @@ export default function MatchScreen() {
               </div>
 
               {bestMatch.user.bio && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "rgba(0,0,0,0.7)",
-                    marginTop: 4,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {bestMatch.user.bio}
-                </div>
+                <div className="match-main-bio">{bestMatch.user.bio}</div>
               )}
 
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "rgba(0,0,0,0.7)",
-                  marginTop: 6,
-                  lineHeight: 1.4,
-                }}
-              >
+              <div className="match-main-destination">
                 They’re heading toward{" "}
                 <strong>
                   {bestMatch.trip.destination?.text || "a similar area"}
@@ -825,15 +820,8 @@ export default function MatchScreen() {
             </div>
           </div>
 
-          {/* ACTIONS */}
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
+          {/* MATCH ACTIONS */}
+          <div className="match-main-actions">
             {!accepted && (
               <>
                 <button
@@ -889,37 +877,28 @@ export default function MatchScreen() {
         </div>
       )}
 
-      {/* RATING CARD – after finish */}
+      {/* RATING CARD */}
       {accepted && showRating && bestMatch && (
-        <div className="card card--padded" style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+        <div className="match-card">
+          <div className="match-rating-title">
             Rate your experience with {bestMatch.user.name}
           </div>
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
+          <div className="match-rating-subtitle">
             This helps keep the community safe and kind.
           </div>
 
-          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <div className="match-rating-stars">
             {[1, 2, 3, 4, 5].map((star) => (
               <button
                 key={star}
                 type="button"
                 onClick={() => setSelectedRating(star)}
-                style={{
-                  flex: 1,
-                  padding: "8px 0",
-                  borderRadius: 999,
-                  border:
-                    selectedRating >= star
-                      ? "2px solid var(--pink)"
-                      : "1px solid rgba(0,0,0,0.15)",
-                  background:
-                    selectedRating >= star
-                      ? "rgba(232, 66, 140, 0.1)"
-                      : "#fff",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
+                className={
+                  "match-rating-star" +
+                  (selectedRating >= star
+                    ? " match-rating-star--active"
+                    : "")
+                }
               >
                 {star}
               </button>
@@ -937,109 +916,69 @@ export default function MatchScreen() {
         </div>
       )}
 
-      {/* ROUTE CARD – always show your route (in-person with meeting point, virtual without) */}
+      {/* ROUTE CARD */}
       {myTrip && (
-        <div className="card card--padded" style={{ marginTop: 10 }}>
-          <div
-            style={{
-              fontSize: 13,
-              opacity: 0.8,
-              marginBottom: 4,
-            }}
-          >
+        <div className="match-card">
+          <div className="match-card-label">
             Your route{!isVirtual && meetingPoint ? " & meeting point" : ""}
           </div>
 
           {!isVirtual && meetingPoint && (
             <>
-              <div
-                style={{
-                  fontSize: 13,
-                  marginBottom: 4,
-                  color: "var(--pink)",
-                  fontWeight: 600,
-                }}
-              >
-                Your meeting point is:{" "}
-                <span style={{ fontWeight: 800 }}>
+              <div className="match-meeting-headline">
+                Your meeting point is{" "}
+                <span className="match-meeting-name">
                   {meetingPoint.name || "a safe nearby spot"}
                 </span>
               </div>
 
               {meetingPoint.address && (
-                <div
-                  style={{
-                    fontSize: 11,
-                    marginBottom: 6,
-                    color: "rgba(0,0,0,0.7)",
-                  }}
-                >
+                <div className="match-meeting-address">
                   {meetingPoint.address}
                 </div>
               )}
             </>
           )}
 
-          <div
-            ref={mapDivRef}
-            style={{
-              width: "100%",
-              height: "38vh",
-              borderRadius: 14,
-              background: "#eee",
-              marginTop: 4,
-              marginBottom: 6,
-              overflow: "hidden",
-            }}
-          />
+          <div ref={mapDivRef} className="match-map" />
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 3,
-              fontSize: 11,
-              color: "rgba(0,0,0,0.7)",
-            }}
-          >
+          {/* Legend */}
+          <div className="match-legend">
+            <div className="match-legend-row">
+              <span className="match-legend-dot match-legend-dot--you" />
+              <span>You</span>
+            </div>
+
+            {!isVirtual && (
+              <div className="match-legend-row">
+                <span className="match-legend-dot match-legend-dot--meet" />
+                <span>
+                  Meeting spot
+                  {bestMatch?.user?.name
+                    ? ` with ${bestMatch.user.name}`
+                    : ""}
+                </span>
+              </div>
+            )}
+
+            <div className="match-legend-row">
+              <span className="match-legend-dot match-legend-dot--dest" />
+              <span>Your destination</span>
+            </div>
+
             {isVirtual ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span
-                  style={{
-                    width: 18,
-                    height: 4,
-                    borderRadius: 999,
-                    background: "#b83990",
-                  }}
-                />
+              <div className="match-legend-row">
+                <span className="match-legend-line match-legend-line--solo" />
                 <span>Your route for this walk</span>
               </div>
             ) : (
               <>
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: 6 }}
-                >
-                  <span
-                    style={{
-                      width: 18,
-                      height: 4,
-                      borderRadius: 999,
-                      background: "#b83990",
-                    }}
-                  />
+                <div className="match-legend-row">
+                  <span className="match-legend-line match-legend-line--solo" />
                   <span>Start → meeting point (you alone)</span>
                 </div>
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: 6 }}
-                >
-                  <span
-                    style={{
-                      width: 18,
-                      height: 4,
-                      borderRadius: 999,
-                      background: "#492642",
-                    }}
-                  />
+                <div className="match-legend-row">
+                  <span className="match-legend-line match-legend-line--together" />
                   <span>Meeting point → destination (together)</span>
                 </div>
               </>

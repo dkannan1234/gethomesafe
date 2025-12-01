@@ -406,46 +406,152 @@ input {
   padding: 16px;
 }
 
-/* main content under header: form + map */
+/* ============================
+   JOURNEY / LOCATION SCREEN
+============================ */
+
+/* ============================
+   JOURNEY / LOCATION SCREEN
+============================ */
+
+.journey-screen {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.journey-topbar {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.journey-back {
+  font-size: 14px;
+  padding: 4px 0;
+  color: var(--pink);
+}
+
+/* header */
+.journey-header {
+  margin-bottom: 10px;
+}
+
+.journey-title {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.2;
+  color: var(--pink);
+}
+
+/* main layout */
 .journey-main {
-  flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+
+/* mode toggle */
+.journey-mode-label {
+  margin: 4px 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pink);
+}
+
+.journey-mode-toggle {
+  display: flex;
   gap: 10px;
-  overflow: hidden; /* so we don't scroll the whole screen */
+  margin-bottom: 8px;
 }
 
-/* form takes minimal vertical space */
-.journey-form {
-  flex-shrink: 0;
-}
-
-/* map card stretches to fill remaining space */
-.journey-map-card {
+.journey-mode-btn {
   flex: 1;
-  padding: 10px;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  background: #fff;
+  padding: 10px 8px;
+  border-radius: 999px;
+  border: 2px solid rgba(229, 38, 135, 0.25);
+  background: transparent;
+  color: var(--pink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.journey-mode-btn--active {
+  background: rgba(242, 141, 192, 0.25);
+  border-color: var(--pink);
+}
+
+.journey-mode-help {
+  margin: 0;
+  font-size: 14px; /* bigger explanation text */
+  color: rgba(0, 0, 0, 0.7);
+}
+
+/* form fields */
+.journey-form {
+  margin-top: 4px;
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
-/* actual Google Maps div */
-.journey-map-canvas {
-  flex: 1;
-  border-radius: 14px;
-  background: #eee;
+.journey-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.journey-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pink);
+}
+
+.journey-input {
+  font-size: 15px;
+  border-radius: 16px;
+}
+
+.journey-helper {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.journey-error-small {
+  font-size: 12px;
+  color: #b00020;
+}
+
+.journey-primary-btn {
+  margin-top: 4px;
+}
+
+/* map – at least ~65% of screen height */
+.journey-map-section {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  border-radius: 18px;
   overflow: hidden;
 }
 
-/* caption */
-.map-caption {
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgba(229, 38, 135, 0.85);
-  margin: 8px 0 0;
+.journey-map {
+  width: 100%;
+  height: 48vh;          /* shorter so whole screen fits */
+  border-radius: 18px;
+  background: #eee;
+  margin-top: 0px;
+  margin-bottom: 100px;   /* visible cream strip under map edge */
+  overflow: hidden;
 }
+
+/* A gentle end-of-screen spacer below the map */
+.journey-bottom-spacer {
+  height: 100px;       /* adjust — 32–60px works great */
+  width: 100%;
+}
+
+
 
 /* ============================
    LOCATION INPUT SCREEN
@@ -494,210 +600,522 @@ input {
   line-height: 1.4;
 }
 
-/* Match screen specific layout: tighter so map fits */
+/* MATCH SCREEN */
+
 .match-screen {
-  padding-top: 12px;
-  padding-bottom: 8px;
+  padding-bottom: 16px;
 }
 
-/* Make header on match screen more compact */
-.match-screen .screen-header {
-  margin-bottom: 8px;
+/* big pink-ish “glass” cards */
+.match-card {
+  background: rgba(242, 141, 192, 0.16); /* #f28dc0 with transparency */
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  margin-top: 12px;
 }
 
-/* Slightly smaller title for space */
-.match-screen .screen-title {
-  font-size: 22px;
-}
-
-.match-screen .screen-subtitle {
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-/* ============================
-   HOME SCREEN
-============================ */
-
-.home-screen {
-  justify-content: flex-start;
-  padding-top: 18px;
-}
-
-.home-hero {
-  margin-bottom: 16px;
-}
-
-.home-greeting {
-  margin: 0 0 4px;
+/* refresh button */
+.match-refresh-btn {
+  width: 100%;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  padding: 10px 16px;
+  border: 1px solid rgba(229, 38, 135, 0.35); /* bright pink border */
+  background: rgba(242, 141, 192, 0.18);
   font-size: 14px;
-  color: rgba(229, 38, 135, 0.85);
+  font-weight: 700;
+  color: var(--pink, #e52687);
 }
 
-.home-title {
-  margin: 0;
-  font-size: 22px;
-  line-height: 1.35;
-  color: var(--pink);
+/* avatar & layout bits */
+.match-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--pink-soft, #f28dc0), var(--pink, #e52687));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 20px;
 }
 
-.home-time {
-  font-size: 18px;
+.match-main-row,
+.match-face-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.match-main-info,
+.match-face-info {
+  flex: 1;
+}
+
+.match-card-label {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.match-main-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pink, #e52687);
+}
+
+.match-main-meta {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+  margin-top: 2px;
+}
+
+.match-main-bio {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.match-main-destination {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.match-main-actions,
+.match-face-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* rating */
+.match-rating-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.match-rating-subtitle {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 10px;
+}
+
+.match-rating-stars {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.match-rating-star {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  font-size: 13px;
   font-weight: 600;
 }
 
-.home-question {
-  margin-top: 10px;
-  margin-bottom: 0;
-  font-size: 14px;
+.match-rating-star--active {
+  border: 2px solid var(--pink, #e52687);
+  background: rgba(232, 66, 140, 0.1);
+}
+
+/* map + legend */
+.match-map {
+  width: 100%;
+  height: 38vh;
+  border-radius: 16px;
+  background: #eee;
+  margin-top: 4px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.match-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
   color: rgba(0, 0, 0, 0.7);
 }
 
+.match-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.match-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.match-legend-dot--you {
+  background: #e52687; /* bright pink */
+}
+
+.match-legend-dot--meet {
+  background: #fff;
+  border: 2px solid #e52687;
+}
+
+.match-legend-dot--dest {
+  background: #f28dc0; /* softer pink */
+}
+
+.match-legend-line {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.match-legend-line--solo {
+  background: #e52687;
+}
+
+.match-legend-line--together {
+  background: #492642;
+}
+
+/* meeting point text */
+.match-meeting-headline {
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--pink, #e52687);
+  font-weight: 600;
+}
+
+.match-meeting-name {
+  font-weight: 800;
+}
+
+.match-meeting-address {
+  font-size: 11px;
+  margin-bottom: 6px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+/* === MATCH SCREEN HEADER & BACK BUTTON === */
+
+.match-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.match-back-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--pink);          /* same pink as other back buttons */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.match-back-btn:hover {
+  opacity: 0.85;
+}
+
+.match-header-text {
+  max-width: 100%;
+}
+
+/* ============================
+   HOME SCREEN – MODERN LAYOUT
+============================ */
+
+.home-screen {
+  display: flex;
+  flex-direction: column;
+}
+
+/* tiny top bar with logout chip */
+.home-topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.home-topbar-logout {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(229, 38, 135, 0.25);
+  color: var(--pink);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* main column content */
 .home-main {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+/* hero: logo + text centered */
+.home-hero {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.home-hero-logo {
+  width: 180px;
+  max-width: 70%;
+  display: block;
+  margin: 0 auto 10px;
+}
+
+.home-hero-welcome {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--pink);
+}
+
+.home-hero-meta {
+  margin: 4px 0 0;
+  font-size: 19px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.home-hero-question {
+  margin-top: 12px;
+  font-size: 20px;
+  color: #333;
+}
+
+/* primary CTA card */
+.home-cta-card {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #f9c2de;
+}
+
+.home-cta-button {
+  font-size: 19px;
+}
+
+.home-cta-caption {
+  margin: 8px 4px 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* two small info cards side-by-side on larger phones */
+.home-info-grid {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
-.home-primary-card {
-  margin-top: 4px;
+@media (min-width: 380px) {
+  .home-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
-.home-how {
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(229, 38, 135, 0.12);
+.home-info-card {
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  background: #f9c2de;
 }
 
-.home-how-title {
-  margin: 0 0 6px;
-  font-size: 13px;
+.home-info-title {
+  margin: 0 0 4px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--pink);
 }
 
-.home-how-list {
+.home-info-text {
   margin: 0;
-  padding-left: 18px;
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.68);
-  line-height: 1.5;
+  font-size: 14px;
+  color: #444;
 }
 
-.home-secondary-actions {
+/* how-it-works list inside card */
+.home-how-list {
+  margin: 4px 0 0 16px;
+  padding: 0;
+  font-size: 14px;
+  color: #444;
+}
+
+/* recent journeys */
+.home-recent-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f9c2de;
   margin-top: 4px;
+}
+
+.home-recent-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--pink);
+}
+
+.home-recent-empty {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+
+
+/* === MESSAGING SCREEN === */
+
+/* === MESSAGING SCREEN FIXES === */
+
+.messaging-screen {
+  background: linear-gradient(180deg, #ffffed, #fff7fb);
+  min-height: 100vh;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+}
+
+/* container */
+.messaging-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
   gap: 8px;
 }
 
-.home-secondary-actions .btn--ghost {
-  flex: 1;
-  justify-content: center;
-  padding-inline: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.65);
-}
-
-/* Messaging layout */
-.messaging-screen {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
-
+/* header */
 .messaging-header {
-  padding: 12px 16px;
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
 }
 
-.messaging-title-block {
+.messaging-title {
+  font-size: 20px;   /* smaller */
+  font-weight: 700;
+  color: var(--pink);
+}
+
+.messaging-subtitle {
+  font-size: 13px;
+  color: rgba(0,0,0,0.55);
+  margin-top: -4px;
+}
+
+/* restore consistent back button */
+.messaging-back-btn {
+  color: var(--pink);
+  background: transparent;
+  border: none;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+/* card */
+.messaging-card {
+  background: rgba(242, 141, 192, 0.14); /* soft pink glass */
+  border-radius: 20px;
+  padding: 12px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.05);
   display: flex;
   flex-direction: column;
-  text-align: left;
+  height: calc(100vh - 160px); /* FIX: fits inside screen */
+  overflow: hidden;
 }
 
-.messages-container {
+/* top meta */
+.messaging-meta {
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: rgba(0,0,0,0.7);
+}
+
+/* messages list */
+.messaging-list {
   flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-  background: #f8f9fa;
-}
-
-/* Empty state */
-.messages-empty {
-  text-align: center;
-  margin-top: 24px;
-  color: #888;
-}
-
-/* Message rows + bubbles */
-.message-row {
   display: flex;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 2px;
+  overflow-y: auto;     /* FIX: no cutoff ever */
 }
 
-.message-row--me {
-  justify-content: flex-end;
-}
-
-.message-row--them {
-  justify-content: flex-start;
-}
-
+/* bubbles */
 .message-bubble {
-  max-width: 70%;
-  padding: 8px 12px;
+  max-width: 78%;
+  padding: 10px 14px;
   border-radius: 16px;
   font-size: 14px;
-  line-height: 1.4;
-  word-wrap: break-word;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-/* My messages: light blue */
 .message-bubble--me {
-  background-color: #bde0fe; /* light blue */
-  color: #123;
+  background: var(--pink);
+  color: white;
+  align-self: flex-end;
   border-bottom-right-radius: 4px;
 }
 
-/* Partner messages: light grey */
-.message-bubble--them {
-  background-color: #e5e5ea; /* light grey */
-  color: #222;
+.message-bubble--other {
+  background: #ffffff;
+  color: #3b2f3b;
+  align-self: flex-start;
   border-bottom-left-radius: 4px;
 }
 
-.message-meta {
-  margin-top: 4px;
-  font-size: 11px;
-  opacity: 0.7;
-  text-align: right;
+.message-name {
+  font-size: 10px;
+  opacity: 0.9;
 }
 
-/* Input bar */
-.message-input-bar {
+.message-time {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+/* input row */
+.messaging-input-row {
   display: flex;
-  padding: 8px 10px;
-  border-top: 1px solid #ddd;
-  background: #fff;
   gap: 8px;
+  padding-top: 8px;
 }
 
-.message-input {
+.messaging-input {
   flex: 1;
+  padding: 12px 16px;
   border-radius: 999px;
-  border: 1px solid #ccc;
-  padding: 8px 12px;
-  outline: none;
+  background: #fff;
+  border: 1px solid #e8d6e9;
+  font-size: 15px;
 }
 
-.message-input:focus {
-  border-color: #4dabf7;
+.messaging-send-btn {
+  padding-inline: 20px;
+  border-radius: 999px;
 }
+
 
 .tf-top-row {
   display: flex;

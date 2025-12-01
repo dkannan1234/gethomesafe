@@ -1,15 +1,29 @@
 // src/screens/HomeScreen.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import welcomeImage from "../assets/welcome-page.png";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
-  const name = localStorage.getItem("ghs_name") || "friend";
+  const fullName = localStorage.getItem("ghs_name") || "friend";
+  const firstName = fullName.split(" ")[0];
 
   const [city, setCity] = useState("");
   const [timeString, setTimeString] = useState("");
 
-  // live-ish time (updates every minute)
+  // simple daily tips
+  const travelTips = [
+    "Share your route with a friend before you leave.",
+    "Stick to well-lit streets when you can.",
+    "Keep one ear free if you’re walking with headphones.",
+    "If something feels off, trust that feeling and change your route.",
+    "Text someone when you’ve arrived home safely.",
+  ];
+  const [tip] = useState(
+    () => travelTips[Math.floor(Math.random() * travelTips.length)]
+  );
+
+  // live-ish time
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -26,7 +40,7 @@ export default function HomeScreen() {
     return () => clearInterval(id);
   }, []);
 
-  // try to figure out city (using geolocation + Google Maps if available)
+  // city lookup
   useEffect(() => {
     const saved = localStorage.getItem("ghs_last_city");
     if (saved) setCity(saved);
@@ -61,7 +75,6 @@ export default function HomeScreen() {
         }
       },
       () => {
-        // if user blocks location, just use whatever we had before (if anything)
         const fallback = localStorage.getItem("ghs_last_city");
         if (fallback) setCity(fallback);
       },
@@ -69,63 +82,82 @@ export default function HomeScreen() {
     );
   }, []);
 
-  const locationLine = city
-    ? `You’re in ${city}.`
-    : "You’re in your area.";
-  const timeLine = timeString ? `It’s ${timeString} right now.` : "";
+  const metaLine =
+    city && timeString
+      ? `You’re in ${city} · ${timeString}`
+      : city
+      ? `You’re in ${city}`
+      : timeString
+      ? `It’s ${timeString}`
+      : "";
+
+  const handleLogout = () => {
+    localStorage.removeItem("ghs_token");
+    localStorage.removeItem("ghs_name");
+    localStorage.removeItem("ghs_phone");
+    localStorage.removeItem("ghs_user_id");
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="screen home-screen">
-      <header className="home-hero">
-        <p className="home-greeting">Hi, {name}</p>
-
-        <h1 className="home-title">
-          {locationLine}
-          <br />
-          <span className="home-time">{timeLine}</span>
-        </h1>
-
-        <p className="home-question">
-          Do you want to find a buddy to get home with?
-        </p>
+      {/* small top bar */}
+      <header className="home-topbar">
+        <button type="button" className="btn home-topbar-logout" onClick={handleLogout}>
+          Log out
+        </button>
       </header>
 
       <main className="home-main">
-        <div className="card card--padded home-primary-card">
+        {/* HERO */}
+        <section className="home-hero">
+          <img
+            src={welcomeImage}
+            alt="Welcome"
+            className="home-hero-logo"
+          />
+          <p className="home-hero-welcome">Welcome, {firstName}.</p>
+          {metaLine && <p className="home-hero-meta">{metaLine}</p>}
+          <p className="home-hero-question">
+            Need someone to walk or ride home with?
+          </p>
+        </section>
+
+        {/* PRIMARY CTA CARD */}
+        <section className="card home-cta-card">
           <button
-            className="btn btn--primary btn--full"
+            className="btn btn--primary btn--full home-cta-button"
             onClick={() => navigate("/journey")}
           >
             Start a journey & find a buddy
           </button>
+          <p className="home-cta-caption">
+            Tell us your route and we’ll look for people on a similar path.
+          </p>
+        </section>
 
-          <div className="home-how">
-            <p className="home-how-title">How GetHomeSafe works</p>
+        {/* TWO LITTLE INFO CARDS */}
+        <section className="home-info-grid">
+          <article className="card home-info-card">
+            <p className="home-info-title">Today’s safety tip</p>
+            <p className="home-info-text">{tip}</p>
+          </article>
+
+          <article className="card home-info-card">
+            <p className="home-info-title">How it works</p>
             <ol className="home-how-list">
-              <li>Tell us where you’re starting and where you’re going.</li>
+              <li>Share where you’re starting and going.</li>
               <li>We suggest a safe meeting point with someone nearby.</li>
-              <li>
-                Walk together or stay on a call while you both head home.
-              </li>
+              <li>Walk together — or stay on a call.</li>
             </ol>
-          </div>
-        </div>
+          </article>
+        </section>
 
-        <div className="home-secondary-actions">
-          <button
-            className="btn btn--ghost"
-            onClick={() => navigate("/past-trips")}
-          >
-            Past journeys
-          </button>
-
-          <button
-            className="btn btn--ghost"
-            onClick={() => navigate("/messages")}
-          >
-            Messages
-          </button>
-        </div>
+        {/* RECENT JOURNEYS */}
+        <section className="card home-recent-card">
+          <p className="home-recent-title">Past journeys</p>
+          <p className="home-recent-empty">No journeys yet.</p>
+        </section>
       </main>
     </div>
   );
