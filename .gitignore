@@ -1,1 +1,6 @@
 node_modules/
+server/firebase-service-account.json
+server/gethomesafe-220f1-firebase-adminsdk-fbsvc-a09d839c96.json
+.env.local
+echo "server/gethomesafe-220f1-firebase-adminsdk-fbsvc-a09d839c96.json" >> .gitignore
+echo ".env" >> .gitignore

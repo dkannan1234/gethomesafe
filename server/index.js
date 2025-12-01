@@ -1,10 +1,11 @@
 // server/index.js
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
 
 const User = require("./models/User");
 const Trip = require("./models/Trip");
@@ -18,58 +19,72 @@ app.use(express.json());
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 
 // --- Health check ---
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true, message: "API is up" });
+app.get("/api/users/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id." });
+    }
+
+    const user = await User.findById(id).lean();
+    if (!user) {
+      return res.status(404).json({ message: `User ${id} not found` });
+    }
+
+    res.json({
+      id: user._id.toString(),
+      name: user.name,
+      phone: user.phone,
+      bio: user.bio || "",
+      ratingAverage: user.ratingAverage ?? null,
+      ratingCount: user.ratingCount ?? 0,
+    });
+  } catch (err) {
+    console.error("GET /api/users/:id error:", err);
+    res.status(500).json({ message: "Server error fetching user." });
+  }
 });
 
 // --- Register (sign up) ---
-app.post("/api/auth/register", async (req, res) => {
+// Submit a rating for a user (1–5 stars)
+app.post("/api/users/:id/rate", async (req, res) => {
   try {
-    const { name, phone, password, agreedToGuidelines } = req.body;
+    const { id } = req.params;
+    const { rating } = req.body;
 
-    if (!name || !phone || !password) {
-      return res.status(400).json({ message: "Missing fields." });
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id." });
     }
 
-    if (!agreedToGuidelines) {
-      return res
-        .status(400)
-        .json({ message: "You must agree to the community guidelines." });
+    const numericRating = Number(rating);
+    if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ message: "Rating must be between 1 and 5." });
     }
 
-    const existing = await User.findOne({ phone: phone.trim() });
-    if (existing) {
-      return res
-        .status(409)
-        .json({ message: "Phone number already registered." });
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: `User ${id} not found` });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const currentAvg = user.ratingAverage ?? 0;
+    const currentCount = user.ratingCount ?? 0;
 
-    const user = await User.create({
-      name,
-      phone: phone.trim(),
-      passwordHash,
-      agreedToGuidelines: true,
-    });
+    const newCount = currentCount + 1;
+    const newAvg = ((currentAvg * currentCount) + numericRating) / newCount;
 
-    const token = jwt.sign(
-      { userId: user._id, phone: user.phone },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    user.ratingAverage = newAvg;
+    user.ratingCount = newCount;
+    await user.save();
 
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        phone: user.phone,
-      },
+    res.json({
+      id: user._id.toString(),
+      ratingAverage: user.ratingAverage,
+      ratingCount: user.ratingCount,
     });
   } catch (err) {
-    console.error("Register error:", err);
-    res.status(500).json({ message: "Server error creating account." });
+    console.error("POST /api/users/:id/rate error:", err);
+    res.status(500).json({ message: "Server error submitting rating." });
   }
 });
 
@@ -110,6 +125,7 @@ app.post("/api/auth/login", async (req, res) => {
         id: user._id,
         name: user.name,
         phone: user.phone,
+        bio: user.bio || "",
       },
     });
   } catch (err) {
@@ -118,18 +134,47 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+/**
+ * Fetch a user profile by Mongo _id
+ */
+app.get("/api/users/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id." });
+    }
+
+    const user = await User.findById(id).lean();
+    if (!user) {
+      return res.status(404).json({ message: `User ${id} not found` });
+    }
+
+    res.json({
+      id: user._id.toString(),
+      name: user.name,
+      phone: user.phone,
+      bio: user.bio || "",
+      ratingAverage: user.ratingAverage ?? null,
+      ratingCount: user.ratingCount ?? 0,
+    });
+  } catch (err) {
+    console.error("GET /api/users/:id error:", err);
+    res.status(500).json({ message: "Server error fetching user." });
+  }
+});
+
+// --- Create trip record (server-side history) ---
 app.post("/api/trips", async (req, res) => {
   try {
     const { userId, otherUserId, startLocation, endLocation, tripDate } =
       req.body;
 
     if (!userId || !otherUserId || !startLocation || !endLocation) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "userId, otherUserId, startLocation, and endLocation are required.",
-        });
+      return res.status(400).json({
+        message:
+          "userId, otherUserId, startLocation, and endLocation are required.",
+      });
     }
 
     const trip = await Trip.create({
@@ -152,7 +197,7 @@ app.get("/api/trips/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const trips = await Trip.find({ userId }).sort({ tripDate: -1 }); // newest first
+    const trips = await Trip.find({ userId }).sort({ tripDate: -1 });
 
     res.json(trips);
   } catch (err) {

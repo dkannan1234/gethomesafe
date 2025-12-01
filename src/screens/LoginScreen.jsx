@@ -2,7 +2,27 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// ⬇️ NEW
+import { db } from "../firebaseClient";
+import { doc, setDoc } from "firebase/firestore";
+
+
+const getDefaultApiUrl = () => {
+  const host = window.location.hostname;
+
+  // When you’re on your laptop hitting http://localhost:5173
+  if (host === "localhost" || host === "127.0.0.1") {
+    return "http://localhost:4000";
+  }
+
+  // When you’re on your phone hitting http://192.168.0.61:5173
+  // (i.e., your laptop’s LAN IP)
+  return "http://192.168.0.61:4000";
+};
+
+const API_URL = import.meta.env.VITE_API_URL || getDefaultApiUrl();
+
+
 
 export default function LoginScreen({ initialMode = "signup" }) {
   const navigate = useNavigate();
@@ -15,6 +35,7 @@ export default function LoginScreen({ initialMode = "signup" }) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [bio, setBio] = useState(""); // NEW
 
   // flow state
   const [stepIndex, setStepIndex] = useState(0); // 0,1,2,...
@@ -22,54 +43,95 @@ export default function LoginScreen({ initialMode = "signup" }) {
   const [error, setError] = useState("");
 
   // define the steps for each mode
-  const signupSteps = ["name", "phone", "password", "guidelines"];
+  // NEW: "bio" step added before guidelines
+  const signupSteps = ["name", "phone", "password", "bio", "guidelines"];
   const loginSteps = ["phone", "password"];
   const steps = isSignup ? signupSteps : loginSteps;
   const currentStep = steps[stepIndex];
   const isLastStep = stepIndex === steps.length - 1;
 
-  //  API submit 
-  const submitToServer = async () => {
-    setError("");
-    setLoading(true);
+  // switch between signup and login screens (top-level toggle)
+  const handleSwitchMode = () => {
+    if (loading) return;
 
-    try {
-      const endpoint = isSignup ? "/api/auth/register" : "/api/auth/login";
-
-      const body = isSignup
-        ? { name, phone, password, agreedToGuidelines: agreed }
-        : { phone, password };
-
-      const url = `${API_URL}${endpoint}`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to sign in / sign up.");
-      }
-      // store token + user
-      localStorage.setItem("ghs_token", data.token);
-      localStorage.setItem("ghs_name", data.user.name);
-      localStorage.setItem("ghs_phone", data.user.phone);
-      localStorage.setItem("ghs_user_id", data.user.id); 
-
-      navigate("/home");
-    } catch (err) {
-      console.error("Auth error:", err);
-      setError(
-        err.message === "Failed to fetch"
-          ? `Could not reach the server at ${API_URL}. Make sure it's running.`
-          : err.message
-      );
-    } finally {
-      setLoading(false);
+    if (isSignup) {
+      navigate("/login");
+    } else {
+      navigate("/signup");
     }
   };
+
+  //  API submit
+  const submitToServer = async () => {
+      setError("");
+      setLoading(true);
+
+      try {
+        const endpoint = isSignup ? "/api/auth/register" : "/api/auth/login";
+
+        const body = isSignup
+          ? { name, phone, password, agreedToGuidelines: agreed }
+          : { phone, password };
+
+        const url = `${API_URL}${endpoint}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.message || "Failed to sign in / sign up.");
+        }
+
+        // store token + user
+        localStorage.setItem("ghs_token", data.token);
+        localStorage.setItem("ghs_name", data.user.name);
+        localStorage.setItem("ghs_phone", data.user.phone);
+        localStorage.setItem("ghs_user_id", data.user.id);
+
+        // ⬇️ NEW: mirror profile into Firestore `users/{mongoId}` on SIGNUP
+        if (isSignup) {
+          try {
+            const userId = data.user.id;
+
+            await setDoc(
+              doc(db, "users", userId),
+              {
+                name: data.user.name,
+                phone: data.user.phone,
+                // sensible defaults for your FaceTime / rating flow
+                prefersVideoFirst: false,
+                campusOnly: false,
+                ratingAverage: null,
+                ratingCount: 0,
+                createdAt: new Date().toISOString(),
+              },
+              { merge: true } // in case we ever update later
+            );
+          } catch (mirrorErr) {
+            console.error(
+              "[LoginScreen] Failed to mirror user profile to Firestore:",
+              mirrorErr
+            );
+            // don't block signup if this fails – user can still use the app
+          }
+        }
+
+        navigate("/home");
+      } catch (err) {
+        console.error("Auth error:", err);
+        setError(
+          err.message === "Failed to fetch"
+            ? `Could not reach the server at ${API_URL}. Make sure it's running.`
+            : err.message
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
   // form submit — enter / click continue
   const handleSubmit = async (e) => {
@@ -89,6 +151,10 @@ export default function LoginScreen({ initialMode = "signup" }) {
       setError("Please enter a password.");
       return;
     }
+    if (currentStep === "bio" && !bio.trim()) {
+      setError("Please add a brief description about yourself.");
+      return;
+    }
     if (currentStep === "guidelines" && !agreed) {
       setError("Please agree to the guidelines to continue.");
       return;
@@ -102,9 +168,16 @@ export default function LoginScreen({ initialMode = "signup" }) {
   };
 
   const handleBack = () => {
-    if (stepIndex === 0 || loading) return;
-    setError("");
-    setStepIndex((prev) => prev - 1);
+    if (loading) return;
+
+    if (stepIndex > 0) {
+      // normal per-step back
+      setError("");
+      setStepIndex((prev) => prev - 1);
+    } else {
+      // first step → go back to Start Screen
+      navigate("/");
+    }
   };
 
   // ----- step-specific copy -----
@@ -117,6 +190,8 @@ export default function LoginScreen({ initialMode = "signup" }) {
           return "What’s the best number to reach you?";
         case "password":
           return "Create a password to keep your account safe.";
+        case "bio":
+          return "Tell us about yourself.";
         case "guidelines":
           return "Last thing — our community guidelines.";
         default:
@@ -144,6 +219,8 @@ export default function LoginScreen({ initialMode = "signup" }) {
           return "We’ll send important updates about your trips here.";
         case "password":
           return "Pick something you’ll remember!";
+        case "bio":
+          return "This short description will be shown to people you match with, so they know who they’re walking with.";
         case "guidelines":
           return "We’re here to help each other get home safe. We need to be sure this is a safe space only!";
         default:
@@ -175,20 +252,29 @@ export default function LoginScreen({ initialMode = "signup" }) {
 
   return (
     <div className="screen typeform-screen">
-      {/* Top row with Back + mode label */}
+      {/* Top row with Back + mode label + mode switch */}
       <div className="tf-top-row">
-        {stepIndex > 0 && !loading && (
-          <button
-            type="button"
-            className="btn tf-back"
-            onClick={handleBack}
-          >
-            ← Back
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn tf-back"
+          onClick={handleBack}
+          disabled={loading}
+        >
+          ← Back
+        </button>
+
         <div className="tf-mode-label">
           {isSignup ? "Sign up" : "Log in"}
         </div>
+
+        <button
+          type="button"
+          className="btn tf-switch-mode"
+          onClick={handleSwitchMode}
+          disabled={loading}
+        >
+          {isSignup ? "Already have an account?" : "Need an account?"}
+        </button>
       </div>
 
       {/* Card with single question */}
@@ -233,6 +319,18 @@ export default function LoginScreen({ initialMode = "signup" }) {
                 placeholder={
                   isSignup ? "Create a password" : "Your password"
                 }
+              />
+            </div>
+          )}
+
+          {currentStep === "bio" && (
+            <div className="field">
+              <textarea
+                className="field-input tf-input-big"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="For example: 'hobbies: knitting' or 'likes: dogs & coffee'"
+                rows={3}
               />
             </div>
           )}

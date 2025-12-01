@@ -1,6 +1,5 @@
 // src/services/matchingService.js
 import { db } from "../firebaseClient";
-
 import {
   collection,
   doc,
@@ -9,7 +8,7 @@ import {
   query,
   where,
   updateDoc,
-  arrayUnion
+  arrayUnion,
 } from "firebase/firestore";
 import { computeMatchScore } from "../utils/matching";
 
@@ -30,7 +29,7 @@ export async function fetchTrip(tripId) {
 export async function findCandidateMatchesForTrip(myTrip, options = {}) {
   const {
     maxResults = 5,
-    minScore = 0.2 // filter out truly bad matches
+    minScore = 0.2, // filter out truly bad matches
   } = options;
 
   const tripsCol = collection(db, "trips");
@@ -39,7 +38,7 @@ export async function findCandidateMatchesForTrip(myTrip, options = {}) {
   const q = query(
     tripsCol,
     where("status", "==", "searching")
-    // You can also add a city/area field later and filter by that
+    // later: add city/area filters if needed
   );
 
   const snap = await getDocs(q);
@@ -54,10 +53,13 @@ export async function findCandidateMatchesForTrip(myTrip, options = {}) {
     // Skip my own trip
     if (t.userId === myUserId) return;
 
-    // Skip excluded users
+    // Skip excluded users for this trip
     if (excluded.has(t.userId)) return;
 
-    // TODO: optional time window overlap check
+    // Respect match mode (if both trips define one)
+    if (myTrip.matchMode && t.matchMode && myTrip.matchMode !== t.matchMode) {
+      return;
+    }
 
     const score = computeMatchScore(myTrip, t);
     if (score >= minScore) {
@@ -71,11 +73,13 @@ export async function findCandidateMatchesForTrip(myTrip, options = {}) {
   return candidates.slice(0, maxResults);
 }
 
-// ... existing fetchTrip & findCandidateMatchesForTrip ...
-
+/**
+ * Mark a given userId as excluded for this trip
+ * so they won't show up again as a candidate.
+ */
 export async function excludeUserForTrip(tripId, userIdToExclude) {
   const ref = doc(db, "trips", tripId);
   await updateDoc(ref, {
-    excludedUserIds: arrayUnion(userIdToExclude)
+    excludedUserIds: arrayUnion(userIdToExclude),
   });
 }

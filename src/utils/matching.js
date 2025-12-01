@@ -35,29 +35,80 @@ function similarityFromDistance(distanceMeters, maxGoodDistanceMeters) {
  * Returns a number between 0 and 1.
  */
 export function computeMatchScore(myTrip, otherTrip) {
-  const originDist = haversineDistanceMeters(
-    myTrip.origin,
-    otherTrip.origin
-  );
-  const destDist = haversineDistanceMeters(
-    myTrip.destination,
-    otherTrip.destination
-  );
+  // Safely normalize locations
+  const myOrigin = myTrip.origin || {};
+  const myDest = myTrip.destination || {};
+  const otherOrigin = otherTrip.origin || {};
+  const otherDest = otherTrip.destination || {};
 
-  // Tune these thresholds as needed:
-  const originSim = similarityFromDistance(originDist, 1500);  // 1.5km
-  const destSim = similarityFromDistance(destDist, 2000);      // 2km
+  const myDestText = (myDest.text || "").toLowerCase();
+  const otherDestText = (otherDest.text || "").toLowerCase();
 
-  // Weight destination more than origin if you care more where they end up
-  const weightOrigin = 0.4;
-  const weightDest = 0.6;
+  let score = 0;
 
-  const raw = weightOrigin * originSim + weightDest * destSim;
-
-  // Optional: penalize huge distances hard
-  if (originDist > 5000 && destDist > 5000) {
-    return raw * 0.3;
+  // 1) Destination text similarity (if either side has text)
+  if (myDestText && otherDestText) {
+    // basic overlap: substring match either way
+    if (
+      myDestText.includes(otherDestText) ||
+      otherDestText.includes(myDestText)
+    ) {
+      score += 0.4;
+    }
   }
 
-  return raw;
+  // 2) Coordinate proximity if we have lat/lng for both
+  const hasMyCoords =
+    typeof myOrigin.lat === "number" &&
+    typeof myOrigin.lng === "number" &&
+    typeof myDest.lat === "number" &&
+    typeof myDest.lng === "number";
+
+  const hasOtherCoords =
+    typeof otherOrigin.lat === "number" &&
+    typeof otherOrigin.lng === "number" &&
+    typeof otherDest.lat === "number" &&
+    typeof otherDest.lng === "number";
+
+  if (hasMyCoords && hasOtherCoords) {
+    // You already have this helper; importing from "../utils/matching" above.
+    // If it's in this same file, just call it directly.
+    const startDist = haversineDistanceMeters(
+      { lat: myOrigin.lat, lng: myOrigin.lng },
+      { lat: otherOrigin.lat, lng: otherOrigin.lng }
+    );
+    const endDist = haversineDistanceMeters(
+      { lat: myDest.lat, lng: myDest.lng },
+      { lat: otherDest.lat, lng: otherDest.lng }
+    );
+
+    // Convert distances into 0..1 scores (closer = higher)
+    // 0 m  -> 1.0
+    // 2km+ -> ~0
+    const distToScore = (dMeters) => {
+      const km = dMeters / 1000;
+      if (km >= 2) return 0;
+      return 1 - km / 2;
+    };
+
+    const startScore = distToScore(startDist);
+    const endScore = distToScore(endDist);
+
+    // Weight coordinates fairly high
+    score += 0.3 * startScore + 0.3 * endScore;
+  }
+
+  // 3) Slight bonus if same matchMode is explicitly set
+  if (myTrip.matchMode && otherTrip.matchMode) {
+    if (myTrip.matchMode === otherTrip.matchMode) {
+      score += 0.1;
+    }
+  }
+
+  // clamp to [0, 1]
+  if (score < 0) score = 0;
+  if (score > 1) score = 1;
+
+  return score;
 }
+

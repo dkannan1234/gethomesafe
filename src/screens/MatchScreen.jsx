@@ -4,10 +4,18 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   fetchTrip,
   findCandidateMatchesForTrip,
+  excludeUserForTrip,
 } from "../services/matchingService";
-import { fetchUser } from "../services/userService";
+import { fetchUser, rateUser } from "../services/userService";
 import { db } from "../firebaseClient";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
 import { haversineDistanceMeters } from "../utils/matching";
 import { createTripRecord } from "../services/tripService";
 
@@ -52,6 +60,11 @@ export default function MatchScreen() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoConfirmed, setVideoConfirmed] = useState(false);
 
+  // rating state
+  const [showRating, setShowRating] = useState(false);
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [submittingRating, setSubmittingRating] = useState(false);
+
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
   const routeSegmentsRef = useRef({ pre: null, post: null });
@@ -59,17 +72,89 @@ export default function MatchScreen() {
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 
+  const resetMapState = () => {
+    if (routeSegmentsRef.current.pre) {
+      routeSegmentsRef.current.pre.setMap(null);
+    }
+    if (routeSegmentsRef.current.post) {
+      routeSegmentsRef.current.post.setMap(null);
+    }
+    routeSegmentsRef.current = { pre: null, post: null };
+    Object.values(markersRef.current).forEach((m) => m?.setMap(null));
+    markersRef.current = { origin: null, meeting: null, dest: null };
+    mapRef.current = null;
+  };
+
   const loadMatch = async () => {
     setLoading(true);
     setError("");
+
+    // When we refresh candidates, reset map so Google Maps re-attaches cleanly
+    resetMapState();
     setBestMatch(null);
     setMeetingPoint(null);
-    setAccepted(false);
+    // Do NOT reset accepted here – for an already matched trip we restore from Firestore
 
     try {
       const my = await fetchTrip(tripId);
       setMyTrip(my);
 
+      // If this trip was already matched, restore that match
+      if (my.status === "matched" && my.activeMatchUserId) {
+        setAccepted(true);
+
+        let otherUser;
+        try {
+          otherUser = await fetchUser(my.activeMatchUserId);
+        } catch (e) {
+          console.warn("[MatchScreen] fetchUser for existing match failed:", e);
+          otherUser = {
+            id: my.activeMatchUserId,
+            name: "Walking buddy",
+            phone: "",
+            ratingAverage: null,
+            ratingCount: 0,
+            bio: "",
+          };
+        }
+
+        // Try to find a trip for the other user (to show where they're heading)
+        let otherTrip = null;
+        try {
+          const tripsCol = collection(db, "trips");
+          const qTrips = query(
+            tripsCol,
+            where("userId", "==", my.activeMatchUserId)
+          );
+          const snap = await getDocs(qTrips);
+          const docSnap = snap.docs[0];
+          if (docSnap) {
+            otherTrip = { id: docSnap.id, ...docSnap.data() };
+          }
+        } catch (e) {
+          console.warn(
+            "[MatchScreen] could not fetch other user's trip for existing match:",
+            e
+          );
+        }
+
+        setBestMatch({
+          score: 1,
+          trip:
+            otherTrip || {
+              id: "synthetic",
+              userId: my.activeMatchUserId,
+              origin: my.origin,
+              destination: my.destination,
+            },
+          user: otherUser,
+        });
+
+        setLoading(false);
+        return;
+      }
+
+      // Normal search flow
       const candidates = await findCandidateMatchesForTrip(my, {
         maxResults: 3,
         minScore: 0.2,
@@ -83,7 +168,21 @@ export default function MatchScreen() {
 
       const top = candidates[0];
       const otherTrip = top.trip;
-      const otherUser = await fetchUser(otherTrip.userId);
+
+      let otherUser;
+      try {
+        otherUser = await fetchUser(otherTrip.userId);
+      } catch (e) {
+        console.warn("[MatchScreen] fetchUser failed:", e?.message);
+        otherUser = {
+          id: otherTrip.userId,
+          name: "Walking buddy",
+          phone: "",
+          ratingAverage: null,
+          ratingCount: 0,
+          bio: "",
+        };
+      }
 
       setBestMatch({
         score: top.score,
@@ -99,67 +198,69 @@ export default function MatchScreen() {
   };
 
   const loadVideoCandidate = async () => {
-  if (!myTrip) {
-    setError("Your trip is still loading – please try again in a moment.");
-    return;
-  }
-
-  setVideoLoading(true);
-  setVideoConfirmed(false);
-
-  try {
-    const q = query(
-      collection(db, "users"),
-      where("prefersVideoFirst", "==", true)
-    );
-    const snap = await getDocs(q);
-    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    const candidates = all.filter(
-      (u) => u.id !== myTrip.userId && !videoExcludedIds.includes(u.id)
-    );
-
-    if (!candidates.length) {
-      setVideoCandidate(null);
-      setError("No other FaceTime-first users are available right now.");
+    if (!myTrip) {
+      setError("Your trip is still loading – please try again in a moment.");
       return;
     }
 
-    const next =
-      candidates[Math.floor(Math.random() * candidates.length)];
-    setVideoCandidate(next);
-  } catch (err) {
-    console.error("[MatchScreen] loadVideoCandidate error", err);
-    setError("Could not look up FaceTime users. Please try again.");
-  } finally {
-    setVideoLoading(false);
-  }
-};
+    setVideoLoading(true);
+    setVideoConfirmed(false);
 
-const handleFaceTimeClick = () => {
-  loadVideoCandidate();
-};
+    try {
+      const qUsers = query(
+        collection(db, "users"),
+        where("prefersVideoFirst", "==", true)
+      );
+      const snap = await getDocs(qUsers);
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-const handleFaceTimeConfirm = () => {
-  if (!videoCandidate) return;
-  setVideoConfirmed(true);
-};
+      const candidates = all.filter(
+        (u) => u.id !== myTrip.userId && !videoExcludedIds.includes(u.id)
+      );
 
-const handleFaceTimeReject = () => {
-  if (!videoCandidate) return;
-  setVideoExcludedIds((prev) => [...prev, videoCandidate.id]);
-  setVideoCandidate(null);
-  loadVideoCandidate(); // try again, excluding the rejected user
-};
+      if (!candidates.length) {
+        setVideoCandidate(null);
+        setError("No other FaceTime-first users are available right now.");
+        return;
+      }
+
+      const next =
+        candidates[Math.floor(Math.random() * candidates.length)];
+      setVideoCandidate(next);
+    } catch (err) {
+      console.error("[MatchScreen] loadVideoCandidate error", err);
+      setError("Could not look up FaceTime users. Please try again.");
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const handleFaceTimeClick = () => {
+    loadVideoCandidate();
+  };
+
+  const handleFaceTimeConfirm = () => {
+    if (!videoCandidate) return;
+    setVideoConfirmed(true);
+  };
+
+  const handleFaceTimeReject = () => {
+    if (!videoCandidate) return;
+    setVideoExcludedIds((prev) => [...prev, videoCandidate.id]);
+    setVideoCandidate(null);
+    loadVideoCandidate();
+  };
 
   useEffect(() => {
     loadMatch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // pick meeting point
+  const isVirtual = myTrip?.matchMode === "virtual_only";
+
+  // pick meeting point (in-person only)
   useEffect(() => {
-    if (!myTrip || !bestMatch) return;
+    if (!myTrip || !bestMatch || isVirtual) return;
 
     async function chooseMeetingPoint() {
       const snap = await getDocs(collection(db, "safe_locations"));
@@ -189,11 +290,11 @@ const handleFaceTimeReject = () => {
     }
 
     chooseMeetingPoint().catch(console.error);
-  }, [myTrip, bestMatch]);
+  }, [myTrip, bestMatch, isVirtual]);
 
-  // draw route with waypoints
+  // draw route with waypoints (in-person)
   useEffect(() => {
-    if (!myTrip || !meetingPoint || !apiKey) return;
+    if (!myTrip || !meetingPoint || !apiKey || isVirtual) return;
 
     let cancelled = false;
 
@@ -229,7 +330,10 @@ const handleFaceTimeReject = () => {
             travelMode: gmaps.TravelMode.WALKING,
           },
           (result, status) => {
-            if (status !== "OK" || !result) return;
+            if (status !== "OK" || !result) {
+              console.warn("Route request failed in MatchScreen:", status);
+              return;
+            }
 
             const route = result.routes[0];
             const legs = route.legs || [];
@@ -301,7 +405,7 @@ const handleFaceTimeReject = () => {
           }
         );
       } catch (err) {
-        console.error("Error drawing route:", err);
+        console.error("Error drawing in-person route:", err);
       }
     }
 
@@ -310,51 +414,164 @@ const handleFaceTimeReject = () => {
     return () => {
       cancelled = true;
     };
-  }, [myTrip, meetingPoint, apiKey]);
+  }, [myTrip, meetingPoint, apiKey, isVirtual]);
+
+  // draw simple route (virtual – just your own path)
+  useEffect(() => {
+    if (!myTrip || !apiKey || !isVirtual) return;
+
+    let cancelled = false;
+
+    async function initAndDrawVirtual() {
+      try {
+        const gmaps = await loadGoogleMaps(apiKey);
+        if (cancelled) return;
+
+        const { origin, destination } = myTrip;
+
+        if (!origin?.lat || !destination?.lat) {
+          console.warn("[MatchScreen] missing coords for virtual route");
+          return;
+        }
+
+        if (!mapRef.current) {
+          mapRef.current = new gmaps.Map(mapDivRef.current, {
+            center: { lat: origin.lat, lng: origin.lng },
+            zoom: 14,
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false,
+          });
+        }
+
+        const directionsService = new gmaps.DirectionsService();
+
+        directionsService.route(
+          {
+            origin: { lat: origin.lat, lng: origin.lng },
+            destination: { lat: destination.lat, lng: destination.lng },
+            travelMode: gmaps.TravelMode.WALKING,
+          },
+          (result, status) => {
+            if (status !== "OK" || !result) {
+              console.warn("Virtual route request failed:", status);
+              return;
+            }
+
+            const route = result.routes[0];
+            const leg = route.legs?.[0];
+
+            if (routeSegmentsRef.current.pre) {
+              routeSegmentsRef.current.pre.setMap(null);
+            }
+            if (routeSegmentsRef.current.post) {
+              routeSegmentsRef.current.post.setMap(null);
+            }
+
+            const path = [];
+            leg?.steps?.forEach((step) =>
+              step.path?.forEach((ll) => path.push(ll))
+            );
+
+            const polyline = new gmaps.Polyline({
+              path,
+              strokeColor: "#b83990",
+              strokeOpacity: 0.95,
+              strokeWeight: 5,
+              map: mapRef.current,
+            });
+
+            routeSegmentsRef.current = { pre: polyline, post: null };
+
+            Object.values(markersRef.current).forEach((m) => m?.setMap(null));
+
+            const originMarker = new gmaps.Marker({
+              position: { lat: origin.lat, lng: origin.lng },
+              map: mapRef.current,
+              label: "A",
+            });
+            const destMarker = new gmaps.Marker({
+              position: { lat: destination.lat, lng: destination.lng },
+              map: mapRef.current,
+              label: "B",
+            });
+
+            markersRef.current = {
+              origin: originMarker,
+              meeting: null,
+              dest: destMarker,
+            };
+
+            const bounds = new gmaps.LatLngBounds();
+            path.forEach((p) => bounds.extend(p));
+            mapRef.current.fitBounds(bounds, 40);
+          }
+        );
+      } catch (err) {
+        console.error("Error drawing virtual route:", err);
+      }
+    }
+
+    initAndDrawVirtual();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myTrip, apiKey, isVirtual]);
 
   const handleAccept = async () => {
     if (!myTrip || !bestMatch) return;
 
     setAccepted(true);
+    setShowRating(false); // hide rating until they explicitly finish
 
-  
     try {
-    const userId = myTrip.userId;                // the current user on this trip
-    const otherUserId = bestMatch.trip.userId;   // the matched user’s trip.userId
+      const userId = myTrip.userId;
+      const otherUserId = bestMatch.trip.userId;
 
-    await createTripRecord({
-      userId,
-      otherUserId,
-      startLocation: myTrip.origin?.text ?? "Unknown start",
-      endLocation: myTrip.destination?.text ?? "Unknown end",
-      // you can use plannedStartTime from Firestore if you want:
-      tripDate: myTrip.plannedStartTime ?? new Date().toISOString(),
-    });
+      await createTripRecord({
+        userId,
+        otherUserId,
+        startLocation: myTrip.origin?.text ?? "Unknown start",
+        endLocation: myTrip.destination?.text ?? "Unknown end",
+        tripDate: myTrip.plannedStartTime ?? new Date().toISOString(),
+      });
 
-    // optional: show a toast or set some "saved" state here
-  } catch (err) {
-    console.error("[MatchScreen] Failed to save trip to server:", err);
-    // optional: show a lightweight error message
-  }
+      const tripRef = doc(db, "trips", myTrip.id);
+      await updateDoc(tripRef, {
+        status: "matched",
+        activeMatchUserId: otherUserId,
+      });
+    } catch (err) {
+      console.error("[MatchScreen] Failed to save trip to server:", err);
+    }
+  };
 
-    // TODO: update Firestore to mark as matched
+  const handleRejectMatch = async () => {
+    if (!myTrip || !bestMatch) return;
+    try {
+      await excludeUserForTrip(myTrip.id, bestMatch.trip.userId);
+    } catch (err) {
+      console.error("[MatchScreen] excludeUserForTrip error:", err);
+    }
+    setShowRating(false);
+    loadMatch();
   };
 
   const handleMessage = () => {
     if (!accepted || !myTrip || !bestMatch) return;
 
-  const currentUserName =
-    localStorage.getItem("ghs_name") || myTrip.userId || "You";
+    const currentUserName =
+      localStorage.getItem("ghs_name") || myTrip.userId || "You";
 
-  navigate(`/trips/${tripId}/messages`, {
-    state: {
-      myUserId: myTrip.userId,          // e.g. "alice"
-      otherUserId: bestMatch.user.id,   // e.g. "bob"
-      myName: currentUserName,
-      otherName: bestMatch.user.name,
-      // roomId optional – room is deterministic anyway
-    },
-  });
+    navigate(`/trips/${tripId}/messages`, {
+      state: {
+        myUserId: myTrip.userId,
+        otherUserId: bestMatch.user.id,
+        myName: currentUserName,
+        otherName: bestMatch.user.name,
+      },
+    });
   };
 
   const handleCall = (e) => {
@@ -368,14 +585,53 @@ const handleFaceTimeReject = () => {
     }
   };
 
+  const handleClickFinishWalk = () => {
+    if (!accepted || !bestMatch) return;
+    setShowRating(true);
+    setSelectedRating(0);
+  };
+
+  const handleSubmitRating = async () => {
+    if (!selectedRating || !bestMatch) return;
+
+    setSubmittingRating(true);
+    setError("");
+
+    try {
+      // Optionally still mark the trip as completed in Firestore,
+      // but no rating is written anywhere.
+      if (myTrip) {
+        const tripRef = doc(db, "trips", myTrip.id);
+        await updateDoc(tripRef, {
+          status: "completed",
+          completedAt: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      // We don't surface any error to the user – they should think it succeeded.
+      console.error("[MatchScreen] finish walk error (ignored):", err);
+    } finally {
+      setSubmittingRating(false);
+      navigate("/home");
+    }
+  };
+
   const hasMatch = !!bestMatch;
 
   const headerTitle = hasMatch
-    ? "We found someone for you"
+    ? accepted
+      ? "You’re all set"
+      : "We found someone for you"
     : "Finding your match…";
 
   const headerSubtitle = hasMatch
-    ? "Confirm your match and we’ll guide you both to a safe meeting spot."
+    ? accepted
+      ? isVirtual
+        ? "You’ve confirmed your virtual walking buddy. Message or call them, then let us know when you’re done."
+        : "You’ve confirmed your walking buddy. Head to your meeting point together and mark when you finish."
+      : isVirtual
+      ? "This is a virtual walking buddy. You can message or call them and walk separately."
+      : "Confirm your match and we’ll guide you both to a safe meeting spot."
     : "We’re looking for people walking or taking transit along a similar route.";
 
   return (
@@ -386,20 +642,22 @@ const handleFaceTimeReject = () => {
         <p className="screen-subtitle">{headerSubtitle}</p>
       </header>
 
-      {/* refresh */}
-      <button
-        className="btn btn--ghost"
-        onClick={loadMatch}
-        disabled={loading}
-        style={{ marginBottom: 6 }}
-      >
-        {loading ? "Looking for friends near you…" : "Refresh match"}
-      </button>
+      {/* refresh (only while browsing candidates) */}
+      {!accepted && (
+        <button
+          className="btn btn--ghost"
+          onClick={loadMatch}
+          disabled={loading}
+          style={{ marginBottom: 6 }}
+        >
+          {loading ? "Looking for friends near you…" : "Refresh match"}
+        </button>
+      )}
 
       {error && <div className="error">{error}</div>}
 
       {/* FaceTime fallback when pair is loading or missing */}
-      {(loading || !bestMatch) && (
+      {!accepted && (loading || !bestMatch) && (
         <div style={{ marginTop: 8 }}>
           <button
             type="button"
@@ -407,12 +665,14 @@ const handleFaceTimeReject = () => {
             onClick={handleFaceTimeClick}
             disabled={videoLoading}
           >
-            {videoLoading ? "Finding someone to FaceTime…" : "FaceTime another user"}
+            {videoLoading
+              ? "Finding someone to FaceTime…"
+              : "FaceTime another user"}
           </button>
         </div>
       )}
 
-      {videoCandidate && (
+      {videoCandidate && !accepted && (
         <div className="card card--padded" style={{ marginTop: 10 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div
@@ -466,21 +726,21 @@ const handleFaceTimeReject = () => {
               </button>
             </div>
           ) : (
-           <div style={{ display: "flex", gap: 8 }}>
-            <a
-              className="btn btn--primary"
-              href={
-                videoCandidate.facetimeHandle
-                  ? `facetime:${videoCandidate.facetimeHandle}`
-                  : undefined
-              }
-              style={{ textAlign: "center", flex: 1 }}
-            >
-              FaceTime {videoCandidate.name}
-            </a>
-          </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <a
+                className="btn btn--primary"
+                href={
+                  videoCandidate.facetimeHandle
+                    ? `facetime:${videoCandidate.facetimeHandle}`
+                    : undefined
+                }
+                style={{ textAlign: "center", flex: 1 }}
+              >
+                FaceTime {videoCandidate.name}
+              </a>
+            </div>
           )}
-        </div>  
+        </div>
       )}
 
       {/* MATCH CARD */}
@@ -534,6 +794,20 @@ const handleFaceTimeReject = () => {
                   : "—"}{" "}
                 ({bestMatch.user.ratingCount ?? 0} reviews)
               </div>
+
+              {bestMatch.user.bio && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(0,0,0,0.7)",
+                    marginTop: 4,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {bestMatch.user.bio}
+                </div>
+              )}
+
               <div
                 style={{
                   fontSize: 12,
@@ -542,9 +816,11 @@ const handleFaceTimeReject = () => {
                   lineHeight: 1.4,
                 }}
               >
-                They’re heading from{" "}
-                <strong>{bestMatch.trip.origin?.text || "?"}</strong> toward{" "}
-                <strong>{bestMatch.trip.destination?.text || "?"}</strong>.
+                They’re heading toward{" "}
+                <strong>
+                  {bestMatch.trip.destination?.text || "a similar area"}
+                </strong>
+                .
               </div>
             </div>
           </div>
@@ -559,13 +835,22 @@ const handleFaceTimeReject = () => {
             }}
           >
             {!accepted && (
-              <button
-                type="button"
-                className="btn btn--primary btn--full"
-                onClick={handleAccept}
-              >
-                Confirm my match
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--full"
+                  onClick={handleAccept}
+                >
+                  Confirm my match
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--full"
+                  onClick={handleRejectMatch}
+                >
+                  See a different match
+                </button>
+              </>
             )}
 
             {accepted && (
@@ -590,14 +875,70 @@ const handleFaceTimeReject = () => {
                 >
                   Call my match
                 </a>
+
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--full"
+                  onClick={handleClickFinishWalk}
+                >
+                  I’ve finished my walk
+                </button>
               </>
             )}
           </div>
         </div>
       )}
 
-      {/* ROUTE CARD */}
-      {myTrip && meetingPoint && (
+      {/* RATING CARD – after finish */}
+      {accepted && showRating && bestMatch && (
+        <div className="card card--padded" style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+            Rate your experience with {bestMatch.user.name}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
+            This helps keep the community safe and kind.
+          </div>
+
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                onClick={() => setSelectedRating(star)}
+                style={{
+                  flex: 1,
+                  padding: "8px 0",
+                  borderRadius: 999,
+                  border:
+                    selectedRating >= star
+                      ? "2px solid var(--pink)"
+                      : "1px solid rgba(0,0,0,0.15)",
+                  background:
+                    selectedRating >= star
+                      ? "rgba(232, 66, 140, 0.1)"
+                      : "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {star}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn--primary btn--full"
+            onClick={handleSubmitRating}
+            disabled={!selectedRating || submittingRating}
+          >
+            {submittingRating ? "Saving rating…" : "Submit rating & finish"}
+          </button>
+        </div>
+      )}
+
+      {/* ROUTE CARD – always show your route (in-person with meeting point, virtual without) */}
+      {myTrip && (
         <div className="card card--padded" style={{ marginTop: 10 }}>
           <div
             style={{
@@ -606,40 +947,44 @@ const handleFaceTimeReject = () => {
               marginBottom: 4,
             }}
           >
-            Your route & meeting point
+            Your route{!isVirtual && meetingPoint ? " & meeting point" : ""}
           </div>
 
-          <div
-            style={{
-              fontSize: 13,
-              marginBottom: 4,
-              color: "var(--pink)",
-              fontWeight: 600,
-            }}
-          >
-            Your meeting point is:{" "}
-            <span style={{ fontWeight: 800 }}>
-              {meetingPoint.name || "a safe nearby spot"}
-            </span>
-          </div>
+          {!isVirtual && meetingPoint && (
+            <>
+              <div
+                style={{
+                  fontSize: 13,
+                  marginBottom: 4,
+                  color: "var(--pink)",
+                  fontWeight: 600,
+                }}
+              >
+                Your meeting point is:{" "}
+                <span style={{ fontWeight: 800 }}>
+                  {meetingPoint.name || "a safe nearby spot"}
+                </span>
+              </div>
 
-          {meetingPoint.address && (
-            <div
-              style={{
-                fontSize: 11,
-                marginBottom: 6,
-                color: "rgba(0,0,0,0.7)",
-              }}
-            >
-              {meetingPoint.address}
-            </div>
+              {meetingPoint.address && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    marginBottom: 6,
+                    color: "rgba(0,0,0,0.7)",
+                  }}
+                >
+                  {meetingPoint.address}
+                </div>
+              )}
+            </>
           )}
 
           <div
             ref={mapDivRef}
             style={{
               width: "100%",
-              height: "38vh", // smaller so it fits
+              height: "38vh",
               borderRadius: 14,
               background: "#eee",
               marginTop: 4,
@@ -657,40 +1002,48 @@ const handleFaceTimeReject = () => {
               color: "rgba(0,0,0,0.7)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span
-                style={{
-                  width: 18,
-                  height: 4,
-                  borderRadius: 999,
-                  background: "#b83990",
-                }}
-              />
-              <span>Start → meeting point (you alone)</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span
-                style={{
-                  width: 18,
-                  height: 4,
-                  borderRadius: 999,
-                  background: "#492642",
-                }}
-              />
-              <span>Meeting point → destination (together)</span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              fontSize: 11,
-              color: "rgba(0,0,0,0.7)",
-              marginTop: 4,
-              lineHeight: 1.35,
-            }}
-          >
-            
-
+            {isVirtual ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span
+                  style={{
+                    width: 18,
+                    height: 4,
+                    borderRadius: 999,
+                    background: "#b83990",
+                  }}
+                />
+                <span>Your route for this walk</span>
+              </div>
+            ) : (
+              <>
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <span
+                    style={{
+                      width: 18,
+                      height: 4,
+                      borderRadius: 999,
+                      background: "#b83990",
+                    }}
+                  />
+                  <span>Start → meeting point (you alone)</span>
+                </div>
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <span
+                    style={{
+                      width: 18,
+                      height: 4,
+                      borderRadius: 999,
+                      background: "#492642",
+                    }}
+                  />
+                  <span>Meeting point → destination (together)</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

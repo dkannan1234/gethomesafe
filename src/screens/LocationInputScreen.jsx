@@ -78,6 +78,11 @@ export default function LocationInputScreen({ onContinue }) {
   const [isRouting, setIsRouting] = useState(false);
   const [isSavingTrip, setIsSavingTrip] = useState(false);
 
+  // NEW: whether this trip is looking for an in-person walking buddy or a virtual one
+  // "in_person" -> physically meet + walk
+  // "virtual_only" -> just walk on similar route, talk / share status
+  const [matchMode, setMatchMode] = useState("in_person");
+
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
   console.log("[LocationInput] VITE_GOOGLE_MAPS_KEY:", apiKey);
 
@@ -123,7 +128,12 @@ export default function LocationInputScreen({ onContinue }) {
           originAutocompleteRef.current = ac;
           ac.addListener("place_changed", () => {
             const place = ac.getPlace();
-            if (!place.geometry || !place.geometry.location) return;
+            if (!place.geometry || !place.geometry.location) {
+              // Allow free-text name; we still keep the text but just skip coords
+              setOriginCoords(null);
+              setOriginAddress(place.formatted_address || place.name || "");
+              return;
+            }
             const loc = place.geometry.location;
             const coords = { lat: loc.lat(), lng: loc.lng() };
             setOriginCoords(coords);
@@ -141,7 +151,11 @@ export default function LocationInputScreen({ onContinue }) {
           destAutocompleteRef.current = ac;
           ac.addListener("place_changed", () => {
             const place = ac.getPlace();
-            if (!place.geometry || !place.geometry.location) return;
+            if (!place.geometry || !place.geometry.location) {
+              setDestCoords(null);
+              setDestAddress(place.formatted_address || place.name || "");
+              return;
+            }
             const loc = place.geometry.location;
             const coords = { lat: loc.lat(), lng: loc.lng() };
             setDestCoords(coords);
@@ -152,7 +166,13 @@ export default function LocationInputScreen({ onContinue }) {
         setMapsReady(true);
       } catch (err) {
         console.error("[LocationInput] Error loading Google Maps:", err);
-        if (!cancelled) setRouteError("Failed to load Google Maps.");
+        if (!cancelled) {
+          // Fallback: let the user still continue even if the map never appears
+          setRouteError(
+            "We couldn’t load the map preview, but you can still continue to find a match."
+          );
+          setMapsReady(false);
+        }
       }
     }
 
@@ -205,7 +225,7 @@ export default function LocationInputScreen({ onContinue }) {
       (err) => {
         console.error("[LocationInput] Geolocation error:", err);
         setLocError(
-          "Could not fetch current location. You can enter a start address manually."
+          "Could not fetch current location. You can type where you’re starting from instead."
         );
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -242,21 +262,35 @@ export default function LocationInputScreen({ onContinue }) {
     const destInputVal = destInputRef.current?.value.trim() || "";
 
     if (!destInputVal) {
-      setRouteError("Please enter a destination.");
+      setRouteError("Please tell us roughly where you’re going.");
       return;
     }
     if (!originCoords && !originInputVal) {
-      setRouteError("Please allow location or enter a starting address.");
+      setRouteError("Please allow location or type where you’re starting.");
       return;
     }
 
+    const originText = originInputVal || originAddress || "";
+    const destText = destAddress || destInputVal;
+
+    // If Maps isn't ready, fall back to "no map but still match"
     if (
       !mapsReady ||
       !window.google?.maps ||
       !directionsServiceRef.current ||
       !directionsRendererRef.current
     ) {
-      setRouteError("Map not ready yet. Please wait a moment.");
+      setRouteError(
+        "We couldn’t draw the map preview, but we can still look for someone on a similar route."
+      );
+      setRouteReady(true);
+      if (onContinue) {
+        onContinue({
+          origin: { coords: originCoords || null, text: originText },
+          destination: { coords: destCoords || null, text: destText },
+          directions: null,
+        });
+      }
       return;
     }
 
@@ -277,7 +311,18 @@ export default function LocationInputScreen({ onContinue }) {
 
         if (status !== "OK" || !result) {
           console.error("[LocationInput] Directions request failed:", status);
-          setRouteError("Could not compute route between these points.");
+          // Fallback: allow continue without map
+          setRouteError(
+            "We couldn’t draw your exact path, but we’ll still use your start and end to find a match."
+          );
+          setRouteReady(true);
+          if (onContinue) {
+            onContinue({
+              origin: { coords: originCoords || null, text: originText },
+              destination: { coords: destCoords || null, text: destText },
+              directions: null,
+            });
+          }
           return;
         }
 
@@ -285,9 +330,6 @@ export default function LocationInputScreen({ onContinue }) {
         if (result.routes?.[0]?.bounds && mapRef.current) {
           mapRef.current.fitBounds(result.routes[0].bounds);
         }
-
-        const originText = originInputVal || originAddress || "";
-        const destText = destAddress || destInputVal;
 
         if (onContinue) {
           onContinue({
@@ -332,6 +374,7 @@ export default function LocationInputScreen({ onContinue }) {
           lat: destCoords?.lat ?? null,
           lng: destCoords?.lng ?? null,
         },
+        matchMode, // NEW: "in_person" or "virtual_only"
         plannedStartTime: new Date().toISOString(),
         plannedEndTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         status: "searching",
@@ -363,25 +406,89 @@ export default function LocationInputScreen({ onContinue }) {
   const buttonLabel = !routeReady
     ? isRouting
       ? "Calculating route..."
-      : "Show route"
+      : "Show my route"
     : isSavingTrip
-    ? "Finding your match..."
-    : "Find me a match";
+    ? matchMode === "in_person"
+      ? "Finding someone to walk with…"
+      : "Finding your virtual buddy…"
+    : matchMode === "in_person"
+    ? "Find someone to walk with"
+    : "Find a virtual walking buddy";
 
-  // ---- UI (no scrolling: header + form + map all inside the phone frame) ----
+  // ---- UI ----
   return (
     <div className="screen location-screen">
       <header className="screen-header">
         <h1 className="screen-title">Where are you going?</h1>
         <p className="screen-subtitle">
-          Enter your route so we can show your path and then find people heading
-          the same way.
+          Tell us your start and end so we can find someone heading a similar way.
         </p>
       </header>
 
+      {/* NEW: choice between physical vs virtual buddy */}
+      <div className="card card--padded" style={{ marginBottom: 10 }}>
+        <div className="field-label" style={{ marginBottom: 8 }}>
+          How do you want to walk tonight?
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setMatchMode("in_person")}
+            style={{
+              flex: 1,
+              borderRadius: 999,
+              border:
+                matchMode === "in_person"
+                  ? "2px solid var(--pink)"
+                  : "1px solid rgba(229, 38, 135, 0.2)",
+              background:
+                matchMode === "in_person"
+                  ? "rgba(229, 38, 135, 0.07)"
+                  : "transparent",
+            }}
+          >
+            In-person buddy
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setMatchMode("virtual_only")}
+            style={{
+              flex: 1,
+              borderRadius: 999,
+              border:
+                matchMode === "virtual_only"
+                  ? "2px solid var(--pink)"
+                  : "1px solid rgba(229, 38, 135, 0.2)",
+              background:
+                matchMode === "virtual_only"
+                  ? "rgba(229, 38, 135, 0.07)"
+                  : "transparent",
+            }}
+          >
+            Virtual buddy only
+          </button>
+        </div>
+        <p
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            color: "rgba(0,0,0,0.6)",
+            lineHeight: 1.4,
+          }}
+        >
+          In-person buddies meet at a safe location and walk together. Virtual
+          buddies walk separately on similar routes and can just text or call.
+        </p>
+      </div>
+
       <div className="location-main">
         {/* top card with fields + button */}
-        <form className="card card--padded location-form" onSubmit={handlePrimaryClick}>
+        <form
+          className="card card--padded location-form"
+          onSubmit={handlePrimaryClick}
+        >
           <section className="field">
             <label className="field-label" htmlFor="origin-input">
               Start
@@ -390,7 +497,7 @@ export default function LocationInputScreen({ onContinue }) {
               id="origin-input"
               ref={originInputRef}
               type="text"
-              placeholder="Use current location or type an address"
+              placeholder="e.g. 'Campus library' or 'Smith Hall'"
               autoComplete="off"
               className="field-input"
             />
@@ -417,7 +524,7 @@ export default function LocationInputScreen({ onContinue }) {
               id="destination-input"
               ref={destInputRef}
               type="text"
-              placeholder="Where do you want to end up?"
+              placeholder="e.g. 'Home', 'Off-campus house', 'Train station'"
               autoComplete="off"
               className="field-input"
             />
@@ -438,9 +545,9 @@ export default function LocationInputScreen({ onContinue }) {
         <div className="card location-map-card">
           <div ref={mapDivRef} className="location-map" />
           <p className="location-caption">
-            First we’ll show your walking route from where you are. Once it looks
-            right, tap “Find me a match” to look for people heading along a
-            similar path.
+            We’ll try to draw your walking route here. If the map doesn’t load,
+            we’ll still use your start and end to match you with someone going a
+            similar way.
           </p>
         </div>
       </div>

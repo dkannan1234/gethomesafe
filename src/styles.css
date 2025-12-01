@@ -332,10 +332,11 @@ input {
 
 /* larger, cleaner input */
 .tf-input-big {
-  font-size: 18px;
-  padding: 14px 16px;
-  border-radius: 999px;
-  background: var(--bg);
+  font-size: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;   /* normal rounded corners */
+  background: #fffef6;  /* same cream tone as field-input */
+  border: 1px solid rgba(229, 38, 135, 0.3);
 }
 
 /* footer row: dots + button */
@@ -696,4 +697,43 @@ input {
 
 .message-input:focus {
   border-color: #4dabf7;
+}
+
+.tf-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--pink);
+}
+
+/* Back button used for previous step */
+.tf-back {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--pink);
+}
+
+/* “Sign up” / “Log in” label */
+.tf-mode-label {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* Switch between login / signup (“Already have an account?”) */
+.tf-switch-mode {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  color: rgba(229, 38, 135, 0.8); /* matches your subtitle tint */
+  white-space: nowrap;
 }

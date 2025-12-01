@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
+    "express": "^5.1.0",
     "firebase": "^12.5.0",
     "leaflet": "^1.9.4",
     "leaflet-routing-machine": "^3.2.12",
