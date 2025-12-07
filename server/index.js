@@ -4,11 +4,10 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 
 const User = require("./models/User");
 const Trip = require("./models/Trip");
+const authRoutes = require("./routes/auth");
 
 const app = express();
 
@@ -16,9 +15,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+// Mount /api/auth routes from routes/auth.js
+app.use("/api/auth", authRoutes);
 
-// --- Health check ---
+/**
+ * Fetch a user profile by Mongo _id
+ */
 app.get("/api/users/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -36,9 +38,11 @@ app.get("/api/users/:id", async (req, res) => {
       id: user._id.toString(),
       name: user.name,
       phone: user.phone,
+      email: user.email,
       bio: user.bio || "",
       ratingAverage: user.ratingAverage ?? null,
       ratingCount: user.ratingCount ?? 0,
+      emailVerified: user.emailVerified,
     });
   } catch (err) {
     console.error("GET /api/users/:id error:", err);
@@ -46,7 +50,6 @@ app.get("/api/users/:id", async (req, res) => {
   }
 });
 
-// --- Register (sign up) ---
 // Submit a rating for a user (1–5 stars)
 app.post("/api/users/:id/rate", async (req, res) => {
   try {
@@ -85,82 +88,6 @@ app.post("/api/users/:id/rate", async (req, res) => {
   } catch (err) {
     console.error("POST /api/users/:id/rate error:", err);
     res.status(500).json({ message: "Server error submitting rating." });
-  }
-});
-
-// --- Login ---
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const { phone, password } = req.body;
-
-    if (!phone || !password) {
-      return res
-        .status(400)
-        .json({ message: "Phone and password are required." });
-    }
-
-    const user = await User.findOne({ phone: phone.trim() });
-    if (!user) {
-      return res
-        .status(401)
-        .json({ message: "Invalid phone or password." });
-    }
-
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) {
-      return res
-        .status(401)
-        .json({ message: "Invalid phone or password." });
-    }
-
-    const token = jwt.sign(
-      { userId: user._id, phone: user.phone },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        phone: user.phone,
-        bio: user.bio || "",
-      },
-    });
-  } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ message: "Server error logging in." });
-  }
-});
-
-/**
- * Fetch a user profile by Mongo _id
- */
-app.get("/api/users/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid user id." });
-    }
-
-    const user = await User.findById(id).lean();
-    if (!user) {
-      return res.status(404).json({ message: `User ${id} not found` });
-    }
-
-    res.json({
-      id: user._id.toString(),
-      name: user.name,
-      phone: user.phone,
-      bio: user.bio || "",
-      ratingAverage: user.ratingAverage ?? null,
-      ratingCount: user.ratingCount ?? 0,
-    });
-  } catch (err) {
-    console.error("GET /api/users/:id error:", err);
-    res.status(500).json({ message: "Server error fetching user." });
   }
 });
 
