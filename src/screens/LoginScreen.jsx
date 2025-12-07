@@ -2,58 +2,49 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// ⬇️ NEW
 import { db } from "../firebaseClient";
 import { doc, setDoc } from "firebase/firestore";
-
 
 const getDefaultApiUrl = () => {
   const host = window.location.hostname;
 
-  // When you’re on your laptop hitting http://localhost:5173
   if (host === "localhost" || host === "127.0.0.1") {
     return "http://localhost:4000";
   }
 
-  // When you’re on your phone hitting http://192.168.0.61:5173
-  // (i.e., your laptop’s LAN IP)
   return "http://192.168.0.61:4000";
 };
 
 const API_URL = import.meta.env.VITE_API_URL || getDefaultApiUrl();
 
-
-
 export default function LoginScreen({ initialMode = "signup" }) {
   const navigate = useNavigate();
 
-  // mode is fixed by which route we came from
   const isSignup = initialMode === "signup";
 
   // form state
   const [name, setName] = useState("");
+  const [email, setEmail] = useState(""); // NEW
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [agreed, setAgreed] = useState(false);
-  const [bio, setBio] = useState(""); // NEW
+  const [bio, setBio] = useState("");
 
   // flow state
-  const [stepIndex, setStepIndex] = useState(0); // 0,1,2,...
+  const [stepIndex, setStepIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState(""); // optional, to show success/msg
 
-  // define the steps for each mode
-  // NEW: "bio" step added before guidelines
-  const signupSteps = ["name", "phone", "password", "bio", "guidelines"];
+  // NEW: add "email" step into signup flow
+  const signupSteps = ["name", "email", "phone", "password", "bio", "guidelines"];
   const loginSteps = ["phone", "password"];
   const steps = isSignup ? signupSteps : loginSteps;
   const currentStep = steps[stepIndex];
   const isLastStep = stepIndex === steps.length - 1;
 
-  // switch between signup and login screens (top-level toggle)
   const handleSwitchMode = () => {
     if (loading) return;
-
     if (isSignup) {
       navigate("/login");
     } else {
@@ -61,86 +52,107 @@ export default function LoginScreen({ initialMode = "signup" }) {
     }
   };
 
-  //  API submit
   const submitToServer = async () => {
-      setError("");
-      setLoading(true);
+    setError("");
+    setInfo("");
+    setLoading(true);
 
-      try {
-        const endpoint = isSignup ? "/api/auth/register" : "/api/auth/login";
+    try {
+      const endpoint = isSignup ? "/api/auth/register" : "/api/auth/login";
 
-        const body = isSignup
-          ? { name, phone, password, agreedToGuidelines: agreed }
-          : { phone, password };
-
-        const url = `${API_URL}${endpoint}`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          throw new Error(data.message || "Failed to sign in / sign up.");
-        }
-
-        // store token + user
-        localStorage.setItem("ghs_token", data.token);
-        localStorage.setItem("ghs_name", data.user.name);
-        localStorage.setItem("ghs_phone", data.user.phone);
-        localStorage.setItem("ghs_user_id", data.user.id);
-
-        // ⬇️ NEW: mirror profile into Firestore `users/{mongoId}` on SIGNUP
-        if (isSignup) {
-          try {
-            const userId = data.user.id;
-
-            await setDoc(
-              doc(db, "users", userId),
-              {
-                name: data.user.name,
-                phone: data.user.phone,
-                // sensible defaults for your FaceTime / rating flow
-                prefersVideoFirst: false,
-                campusOnly: false,
-                ratingAverage: null,
-                ratingCount: 0,
-                createdAt: new Date().toISOString(),
-              },
-              { merge: true } // in case we ever update later
-            );
-          } catch (mirrorErr) {
-            console.error(
-              "[LoginScreen] Failed to mirror user profile to Firestore:",
-              mirrorErr
-            );
-            // don't block signup if this fails – user can still use the app
+      const body = isSignup
+        ? {
+            name,
+            email,
+            phone,
+            password,
+            agreedToGuidelines: agreed,
+            bio,
           }
+        : { phone, password };
+
+      const url = `${API_URL}${endpoint}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to sign in / sign up.");
+      }
+
+      if (isSignup) {
+        // ✅ SIGNUP FLOW: do NOT log them in yet
+        setInfo(
+          "Account created. Check your email (and spam folder) to verify your address before logging in."
+        );
+
+        // Optional: mirror profile into Firestore right away
+        try {
+          const userId = data.user.id;
+          await setDoc(
+            doc(db, "users", userId),
+            {
+              name: data.user.name,
+              phone: data.user.phone,
+              bio: data.user.bio || "",
+              prefersVideoFirst: false,
+              campusOnly: false,
+              ratingAverage: data.user.ratingAverage ?? null,
+              ratingCount: data.user.ratingCount ?? 0,
+              createdAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (mirrorErr) {
+          console.error(
+            "[LoginScreen] Failed to mirror user profile to Firestore:",
+            mirrorErr
+          );
         }
 
-        navigate("/home");
-      } catch (err) {
-        console.error("Auth error:", err);
-        setError(
-          err.message === "Failed to fetch"
-            ? `Could not reach the server at ${API_URL}. Make sure it's running.`
-            : err.message
-        );
-      } finally {
-        setLoading(false);
+        // Option 1: keep them on this screen, just show info.
+        // Option 2: send them to login screen:
+        navigate("/login");
+        return;
       }
-    };
 
-  // form submit — enter / click continue
+      // ✅ LOGIN FLOW: only here do we store token & go home
+      localStorage.setItem("ghs_token", data.token);
+      localStorage.setItem("ghs_name", data.user.name);
+      localStorage.setItem("ghs_phone", data.user.phone);
+      localStorage.setItem("ghs_user_id", data.user.id);
+      if (data.user.email) {
+        localStorage.setItem("ghs_email", data.user.email);
+      }
+
+      navigate("/home");
+    } catch (err) {
+      console.error("Auth error:", err);
+      setError(
+        err.message === "Failed to fetch"
+          ? `Could not reach the server at ${API_URL}. Make sure it's running.`
+          : err.message
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setInfo("");
 
-    // per-step validation
     if (currentStep === "name" && !name.trim()) {
       setError("Please tell us your name.");
+      return;
+    }
+    if (currentStep === "email" && !email.trim()) {
+      setError("Please enter your email.");
       return;
     }
     if (currentStep === "phone" && !phone.trim()) {
@@ -171,21 +183,21 @@ export default function LoginScreen({ initialMode = "signup" }) {
     if (loading) return;
 
     if (stepIndex > 0) {
-      // normal per-step back
       setError("");
+      setInfo("");
       setStepIndex((prev) => prev - 1);
     } else {
-      // first step → go back to Start Screen
       navigate("/");
     }
   };
 
-  // ----- step-specific copy -----
   const getQuestionTitle = () => {
     if (isSignup) {
       switch (currentStep) {
         case "name":
           return "Welcome to GetHomeSafe!";
+        case "email":
+          return "What’s your email address?";
         case "phone":
           return "What’s the best number to reach you?";
         case "password":
@@ -198,7 +210,6 @@ export default function LoginScreen({ initialMode = "signup" }) {
           return "";
       }
     } else {
-      // login copy
       switch (currentStep) {
         case "phone":
           return "Welcome back.";
@@ -215,6 +226,8 @@ export default function LoginScreen({ initialMode = "signup" }) {
       switch (currentStep) {
         case "name":
           return "We just need some basic information to get things started.";
+        case "email":
+          return "We’ll use this to verify your account and send important notices.";
         case "phone":
           return "We’ll send important updates about your trips here.";
         case "password":
@@ -252,7 +265,6 @@ export default function LoginScreen({ initialMode = "signup" }) {
 
   return (
     <div className="screen typeform-screen">
-      {/* Top row with Back + mode label + mode switch */}
       <div className="tf-top-row">
         <button
           type="button"
@@ -277,7 +289,6 @@ export default function LoginScreen({ initialMode = "signup" }) {
         </button>
       </div>
 
-      {/* Card with single question */}
       <div className="card card--padded tf-card">
         <h1 className="tf-title">{getQuestionTitle()}</h1>
         <p className="tf-subtitle">{getQuestionSubtitle()}</p>
@@ -291,6 +302,19 @@ export default function LoginScreen({ initialMode = "signup" }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My name is..."
+              />
+            </div>
+          )}
+
+          {currentStep === "email" && (
+            <div className="field">
+              <input
+                autoFocus
+                className="field-input tf-input-big"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
               />
             </div>
           )}
@@ -316,9 +340,7 @@ export default function LoginScreen({ initialMode = "signup" }) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={
-                  isSignup ? "Create a password" : "Your password"
-                }
+                placeholder={isSignup ? "Create a password" : "Your password"}
               />
             </div>
           )}
@@ -350,17 +372,16 @@ export default function LoginScreen({ initialMode = "signup" }) {
                   onChange={(e) => setAgreed(e.target.checked)}
                 />
                 <span>
-                  I agree to use this platform responsibly and help others
-                  get home safe.
+                  I agree to use this platform responsibly and help others get home safe.
                 </span>
               </label>
             </div>
           )}
 
           {error && <div className="error">{error}</div>}
+          {info && <div className="info">{info}</div>}
 
           <div className="tf-footer">
-            {/* progress dots */}
             <div className="tf-steps">
               {Array.from({ length: totalSteps }).map((_, idx) => (
                 <span
