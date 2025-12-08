@@ -6,17 +6,17 @@ An application meant to help people arrive at their destinations with more peace
 
 This app was built using React. To run it, first clone the repository using ```git pull ```. Next, change your directory using ```cd gethomesafe```, then run ```npm install```. If you don't have Node.js installed, you can find a link to download it [here](https://nodejs.org/en/download/). Finally, run the command ```npm run dev``` and copy the link in the terminal to a web browser to preview the app. NOTE: In order to run this code, you need to create API keys for the following programs: 
 
-MONGODB_URI=
-PORT=4000
-SENDGRID_API_KEY=
-EMAIL_FROM=
-FRONTEND_URL=
-JWT_SECRET=
+MONGODB_URI= <br>
+PORT=4000<br>
+SENDGRID_API_KEY=<br>
+EMAIL_FROM=<br>
+FRONTEND_URL=<br>
+JWT_SECRET=<br>
 
-These should be placed in a file called server/.env 
+These should be placed in a file called server/.env <br>
 
 Additionally, an API key google maps must be created and placed in the file .env.local in the root directory. 
-VITE_GOOGLE_MAPS_KEY=
+VITE_GOOGLE_MAPS_KEY=<br>
 
 These are not provided in the github repo to ensure the safety of our users. 
 ## Feature showcases
