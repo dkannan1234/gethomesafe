@@ -1,4 +1,3 @@
-// server/index.js
 const path = require("path");
 
 require("dotenv").config({
@@ -17,7 +16,7 @@ const authRoutes = require("./routes/auth");
 
 const app = express();
 
-// 🌐 Allow all origins in dev + JSON bodies
+// Allow all origins in dev + JSON bodies
 app.use(cors());
 app.use(express.json());
 
@@ -97,7 +96,7 @@ app.post("/api/users/:id/rate", async (req, res) => {
   }
 });
 
-// --- Create trip record (server-side history) ---
+// Create trip record (server-side history) 
 app.post("/api/trips", async (req, res) => {
   try {
     const { userId, otherUserId, startLocation, endLocation, tripDate } =
@@ -125,7 +124,7 @@ app.post("/api/trips", async (req, res) => {
   }
 });
 
-// --- Get all trips for a user (most recent first) ---
+// Get all trips for a user (most recent first) 
 app.get("/api/trips/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -139,7 +138,7 @@ app.get("/api/trips/:userId", async (req, res) => {
   }
 });
 
-// --- Boot server AFTER Mongo connects ---
+// Boot server AFTER Mongo connects 
 const PORT = process.env.PORT || 4000;
 
 mongoose
@@ -151,7 +150,7 @@ mongoose
     });
   })
   .catch((err) => {
-    console.error("❌ Mongo connection error:", err);
+    console.error(" Mongo connection error:", err);
     process.exit(1);
   });
 

@@ -1,4 +1,3 @@
-// src/screens/GoogleMapLocationTest.jsx
 import { useEffect, useRef, useState } from "react";
 
 function loadGoogleMaps(apiKey) {

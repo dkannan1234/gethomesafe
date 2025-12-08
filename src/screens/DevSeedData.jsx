@@ -1,4 +1,3 @@
-// src/screens/DevSeedData.jsx
 import { useState } from "react";
 import { db } from "../firebaseClient";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";

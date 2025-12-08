@@ -1,4 +1,3 @@
-// src/screens/MatchScreen.jsx
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -6,16 +5,14 @@ import {
   findCandidateMatchesForTrip,
   excludeUserForTrip,
 } from "../services/matchingService";
-import { fetchUser, rateUser } from "../services/userService";
+import { fetchUser } from "../services/userService";
 import { db } from "../firebaseClient";
 import {
   collection,
   getDocs,
-  getDoc,
   query,
   where,
   doc,
-  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import { haversineDistanceMeters } from "../utils/matching";
@@ -52,19 +49,15 @@ export default function MatchScreen() {
 
   const [loading, setLoading] = useState(false);
   const [myTrip, setMyTrip] = useState(null);
-
-  // In-person match state
   const [bestMatch, setBestMatch] = useState(null);
   const [meetingPoint, setMeetingPoint] = useState(null);
   const [accepted, setAccepted] = useState(false);
-
-  // Virtual buddy state
-  const [virtualHandle, setVirtualHandle] = useState("");
-  const [savingHandle, setSavingHandle] = useState(false);
-  const [virtualBuddy, setVirtualBuddy] = useState(null);
-  const [virtualLoading, setVirtualLoading] = useState(false);
-
   const [error, setError] = useState("");
+
+  const [videoCandidate, setVideoCandidate] = useState(null);
+  const [videoExcludedIds, setVideoExcludedIds] = useState([]);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoConfirmed, setVideoConfirmed] = useState(false);
 
   const [showRating, setShowRating] = useState(false);
   const [selectedRating, setSelectedRating] = useState(0);
@@ -76,9 +69,6 @@ export default function MatchScreen() {
   const markersRef = useRef({ origin: null, meeting: null, dest: null });
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
-
-  const isVirtualTrip =
-    myTrip?.buddyMode === "virtual" || myTrip?.matchMode === "virtual_only";
 
   const resetMapState = () => {
     if (routeSegmentsRef.current.pre) {
@@ -100,84 +90,10 @@ export default function MatchScreen() {
     resetMapState();
     setBestMatch(null);
     setMeetingPoint(null);
-    setVirtualBuddy(null);
 
     try {
       const my = await fetchTrip(tripId);
       setMyTrip(my);
-
-      const virtual =
-        my.buddyMode === "virtual" || my.matchMode === "virtual_only";
-
-      // Pre-fill FaceTime handle for virtual trips from Firestore if present
-      if (virtual) {
-        try {
-          const meRef = doc(db, "users", my.userId);
-          const meSnap = await getDoc(meRef);
-          if (meSnap.exists()) {
-            const data = meSnap.data();
-            if (data.facetimeHandle) {
-              setVirtualHandle(data.facetimeHandle);
-            }
-          }
-        } catch (e) {
-          console.warn("[MatchScreen] could not prefill FaceTime handle:", e);
-        }
-      }
-
-      if (virtual) {
-        // VIRTUAL: look for other virtual trips
-        const candidates = await findCandidateMatchesForTrip(my, {
-          maxResults: 10,
-          minScore: 0.1,
-          timeWindowMinutes: 60,
-        });
-
-        const filtered = candidates.filter((c) => {
-          const t = c.trip;
-          if (!t) return false;
-          if (t.userId === my.userId) return false;
-          if (t.status && t.status !== "searching") return false;
-          if (t.buddyMode && t.buddyMode !== "virtual") return false;
-          return true;
-        });
-
-        if (!filtered.length) {
-          setError(
-            "No other FaceTime-first users are available right now. We'll keep showing your solo route."
-          );
-          setLoading(false);
-          return;
-        }
-
-        const top = filtered[0];
-        const otherTrip = top.trip;
-
-        let otherUser;
-        try {
-          otherUser = await fetchUser(otherTrip.userId);
-        } catch (e) {
-          console.warn("[MatchScreen] fetchUser (virtual) failed:", e?.message);
-          otherUser = {
-            id: otherTrip.userId,
-            name: "Sarah Mejia Toro",
-            phone: "",
-            ratingAverage: null,
-            ratingCount: 0,
-          };
-        }
-
-        setVirtualBuddy({
-          score: top.score,
-          trip: otherTrip,
-          user: otherUser,
-        });
-
-        setLoading(false);
-        return;
-      }
-
-      // ----- IN-PERSON FLOW BELOW -----
 
       // If already matched, restore existing match
       if (my.status === "matched" && my.activeMatchUserId) {
@@ -190,7 +106,7 @@ export default function MatchScreen() {
           console.warn("[MatchScreen] fetchUser for existing match failed:", e);
           otherUser = {
             id: my.activeMatchUserId,
-            name: "Sarah Jacob",
+            name: "Walking buddy",
             phone: "",
             ratingAverage: null,
             ratingCount: 0,
@@ -234,11 +150,12 @@ export default function MatchScreen() {
         return;
       }
 
-      // Normal match search – 1 hour window
+      // Normal match search – now time-aware
       const candidates = await findCandidateMatchesForTrip(my, {
         maxResults: 3,
         minScore: 0.2,
-        timeWindowMinutes: 60,
+        timeWindowMinutes: 45, // ±45 minutes around my plannedStartTime
+        maxFutureMinutes: 180, // up to 3 hours in the future from now
       });
 
       if (!candidates.length) {
@@ -257,7 +174,7 @@ export default function MatchScreen() {
         console.warn("[MatchScreen] fetchUser failed:", e?.message);
         otherUser = {
           id: otherTrip.userId,
-          name: "Sarah Jacob",
+          name: "Walking buddy",
           phone: "",
           ratingAverage: null,
           ratingCount: 0,
@@ -278,14 +195,67 @@ export default function MatchScreen() {
     }
   };
 
+  // FaceTime-first helper people (optional feature)
+  const loadVideoCandidate = async () => {
+    if (!myTrip) {
+      setError("Your trip is still loading – please try again in a moment.");
+      return;
+    }
+
+    setVideoLoading(true);
+    setVideoConfirmed(false);
+
+    try {
+      const qUsers = query(
+        collection(db, "users"),
+        where("prefersVideoFirst", "==", true)
+      );
+      const snap = await getDocs(qUsers);
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const candidates = all.filter(
+        (u) => u.id !== myTrip.userId && !videoExcludedIds.includes(u.id)
+      );
+
+      if (!candidates.length) {
+        setVideoCandidate(null);
+        setError("No other FaceTime-first users are available right now.");
+        return;
+      }
+
+      const next =
+        candidates[Math.floor(Math.random() * candidates.length)];
+      setVideoCandidate(next);
+    } catch (err) {
+      console.error("[MatchScreen] loadVideoCandidate error", err);
+      setError("Could not look up FaceTime users. Please try again.");
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const handleFaceTimeClick = () => loadVideoCandidate();
+  const handleFaceTimeConfirm = () => {
+    if (!videoCandidate) return;
+    setVideoConfirmed(true);
+  };
+  const handleFaceTimeReject = () => {
+    if (!videoCandidate) return;
+    setVideoExcludedIds((prev) => [...prev, videoCandidate.id]);
+    setVideoCandidate(null);
+    loadVideoCandidate();
+  };
+
   useEffect(() => {
     loadMatch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isVirtual = myTrip?.matchMode === "virtual_only";
+
   /* Choose meeting point (in-person only) */
   useEffect(() => {
-    if (!myTrip || !bestMatch || isVirtualTrip) return;
+    if (!myTrip || !bestMatch || isVirtual) return;
 
     async function chooseMeetingPoint() {
       const snap = await getDocs(collection(db, "safe_locations"));
@@ -315,11 +285,11 @@ export default function MatchScreen() {
     }
 
     chooseMeetingPoint().catch(console.error);
-  }, [myTrip, bestMatch, isVirtualTrip]);
+  }, [myTrip, bestMatch, isVirtual]);
 
-  /* Draw route with waypoints (in-person only) */
+  /* Draw route with waypoints (in-person) */
   useEffect(() => {
-    if (!myTrip || !meetingPoint || !apiKey || isVirtualTrip) return;
+    if (!myTrip || !meetingPoint || !apiKey || isVirtual) return;
 
     let cancelled = false;
 
@@ -474,7 +444,130 @@ export default function MatchScreen() {
     return () => {
       cancelled = true;
     };
-  }, [myTrip, meetingPoint, apiKey, isVirtualTrip, bestMatch]);
+  }, [myTrip, meetingPoint, apiKey, isVirtual, bestMatch]);
+
+  /* Draw simple route (virtual – just your route) */
+  useEffect(() => {
+    if (!myTrip || !apiKey || !isVirtual) return;
+
+    let cancelled = false;
+
+    async function initAndDrawVirtual() {
+      try {
+        const gmaps = await loadGoogleMaps(apiKey);
+        if (cancelled) return;
+
+        const { origin, destination } = myTrip;
+
+        if (!origin?.lat || !destination?.lat) {
+          console.warn("[MatchScreen] missing coords for virtual route");
+          return;
+        }
+
+        if (!mapRef.current) {
+          mapRef.current = new gmaps.Map(mapDivRef.current, {
+            center: { lat: origin.lat, lng: origin.lng },
+            zoom: 14,
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false,
+          });
+        }
+
+        const directionsService = new gmaps.DirectionsService();
+
+        directionsService.route(
+          {
+            origin: { lat: origin.lat, lng: origin.lng },
+            destination: { lat: destination.lat, lng: destination.lng },
+            travelMode: gmaps.TravelMode.WALKING,
+          },
+          (result, status) => {
+            if (status !== "OK" || !result) {
+              console.warn("Virtual route request failed:", status);
+              return;
+            }
+
+            const route = result.routes[0];
+            const leg = route.legs?.[0];
+
+            if (routeSegmentsRef.current.pre) {
+              routeSegmentsRef.current.pre.setMap(null);
+            }
+            if (routeSegmentsRef.current.post) {
+              routeSegmentsRef.current.post.setMap(null);
+            }
+
+            const path = [];
+            leg?.steps?.forEach((step) =>
+              step.path?.forEach((ll) => path.push(ll))
+            );
+
+            const polyline = new gmaps.Polyline({
+              path,
+              strokeColor: "#e52687",
+              strokeOpacity: 0.95,
+              strokeWeight: 5,
+              map: mapRef.current,
+            });
+
+            routeSegmentsRef.current = { pre: polyline, post: null };
+
+            Object.values(markersRef.current).forEach((m) => m?.setMap(null));
+
+            const youIcon = {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#e52687",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            };
+
+            const destIcon = {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: "#f28dc0",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            };
+
+            const originMarker = new gmaps.Marker({
+              position: { lat: origin.lat, lng: origin.lng },
+              map: mapRef.current,
+              icon: youIcon,
+              title: "You",
+            });
+            const destMarker = new gmaps.Marker({
+              position: { lat: destination.lat, lng: destination.lng },
+              map: mapRef.current,
+              icon: destIcon,
+              title: "Your destination",
+            });
+
+            markersRef.current = {
+              origin: originMarker,
+              meeting: null,
+              dest: destMarker,
+            };
+
+            const bounds = new gmaps.LatLngBounds();
+            path.forEach((p) => bounds.extend(p));
+            mapRef.current.fitBounds(bounds, 40);
+          }
+        );
+      } catch (err) {
+        console.error("Error drawing virtual route:", err);
+      }
+    }
+
+    initAndDrawVirtual();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myTrip, apiKey, isVirtual]);
 
   const handleAccept = async () => {
     if (!myTrip || !bestMatch) return;
@@ -555,10 +648,6 @@ export default function MatchScreen() {
     setError("");
 
     try {
-      if (bestMatch.user?.id) {
-        await rateUser(bestMatch.user.id, selectedRating);
-      }
-
       if (myTrip) {
         const tripRef = doc(db, "trips", myTrip.id);
         await updateDoc(tripRef, {
@@ -567,86 +656,28 @@ export default function MatchScreen() {
         });
       }
     } catch (err) {
-      console.error("[MatchScreen] finish walk / rating error:", err);
-      setError("We saved your rating, but something went wrong finishing the trip.");
+      console.error("[MatchScreen] finish walk error (ignored):", err);
     } finally {
       setSubmittingRating(false);
       navigate("/home");
     }
   };
 
-  // ---- Virtual buddy helpers (still used via loadMatch / refresh) ----
+  const hasMatch = !!bestMatch;
 
-  const handleSaveVirtualHandle = async () => {
-    if (!myTrip) return;
-    const trimmed = virtualHandle.trim();
-    if (!trimmed) return;
-
-    setSavingHandle(true);
-    setError("");
-
-    try {
-      const userRef = doc(db, "users", myTrip.userId);
-      await setDoc(
-        userRef,
-        {
-          facetimeHandle: trimmed,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-    } catch (err) {
-      console.error("[MatchScreen] save FaceTime handle error:", err);
-      setError("Could not save your FaceTime handle. Please try again.");
-    } finally {
-      setSavingHandle(false);
-    }
-  };
-
-  const handleFindVirtualBuddy = async () => {
-    if (!myTrip) {
-      setError("Your trip is still loading – please try again in a moment.");
-      return;
-    }
-    setVirtualLoading(true);
-    setError("");
-
-    try {
-      await loadMatch();
-    } finally {
-      setVirtualLoading(false);
-    }
-  };
-
-  const handleSeeAnotherVirtualBuddy = async () => {
-    if (!myTrip || !virtualBuddy?.trip?.userId) return;
-
-    try {
-      await excludeUserForTrip(myTrip.id, virtualBuddy.trip.userId);
-    } catch (err) {
-      console.error("[MatchScreen] exclude virtual buddy error:", err);
-    }
-    setVirtualBuddy(null);
-    loadMatch();
-  };
-
-  // ---- Header text ----
-
-  const hasInPersonMatch = !!bestMatch && !isVirtualTrip;
-
-  const headerTitle = isVirtualTrip
-    ? "Finding your match..."
-    : hasInPersonMatch
+  const headerTitle = hasMatch
     ? accepted
       ? "You’re all set"
       : "We found someone for you"
     : "Finding your match…";
 
-  const headerSubtitle = isVirtualTrip
-    ? "You’re in virtual buddy mode. We’ll pair you with someone to walk ‘together’ remotely."
-    : hasInPersonMatch
+  const headerSubtitle = hasMatch
     ? accepted
-      ? "You’ve confirmed your walking buddy. Head to your meeting point together and mark when you finish."
+      ? isVirtual
+        ? "You’ve confirmed your virtual walking buddy. Message or call them, then let us know when you’re done."
+        : "You’ve confirmed your walking buddy. Head to your meeting point together and mark when you finish."
+      : isVirtual
+      ? "This is a virtual walking buddy. You can message or call them and walk separately."
       : "Confirm your match and we’ll guide you both to a safe meeting spot."
     : "We’re looking for people walking or taking transit along a similar route.";
 
@@ -657,7 +688,7 @@ export default function MatchScreen() {
         <button
           type="button"
           className="match-back-btn"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate(-1)} // or () => navigate("/journey") if you prefer
         >
           ← Back to journey
         </button>
@@ -669,7 +700,7 @@ export default function MatchScreen() {
       </header>
 
       {/* REFRESH BUTTON */}
-      {(!accepted || isVirtualTrip) && (
+      {!accepted && (
         <button
           className="btn match-refresh-btn"
           onClick={loadMatch}
@@ -681,75 +712,78 @@ export default function MatchScreen() {
 
       {error && <div className="error" style={{ marginTop: 6 }}>{error}</div>}
 
-      {/* ------------- VIRTUAL BUDDY UI (ONLY RESULT CARD) ------------- */}
-      {isVirtualTrip && virtualBuddy && (
-        <div className="match-card match-card--virtual-result">
-          <div className="match-card-label">Your Virtual Buddy</div>
-
-          <div className="match-main-row">
-            <div className="match-avatar">
-              {virtualBuddy.user.name?.[0] || "V"}
-            </div>
-
-            <div className="match-main-info">
-              <div className="match-main-name">
-                {virtualBuddy.user.name}
-                {virtualBuddy.user.age ? `, ${virtualBuddy.user.age}` : ""}
-              </div>
-
-              <div className="match-main-meta">
-                Rating:{" "}
-                {virtualBuddy.user.ratingAverage != null
-                  ? `${virtualBuddy.user.ratingAverage.toFixed(1)} ⭐`
-                  : "—"}{" "}
-                ({virtualBuddy.user.ratingCount ?? 0} reviews)
-              </div>
-
-              {virtualBuddy.user.bio && (
-                <div className="match-main-bio">{virtualBuddy.user.bio}</div>
-              )}
-
-              <div className="match-main-destination">
-                Phone:{" "}
-                <strong>
-                  {virtualBuddy.user.phone || "Not provided"}
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="match-main-actions">
-            {/* Centered primary button */}
-            <a
-              className="btn btn--primary"
-              style={{
-                display: "block",
-                margin: "12px auto 8px",
-                minWidth: "180px",
-                textAlign: "center",
-              }}
-              href={
-                virtualBuddy.user.phone
-                  ? `tel:${virtualBuddy.user.phone}`
-                  : undefined
-              }
-            >
-              Call my buddy
-            </a>
-
-            <button
-              type="button"
-              className="btn btn--ghost btn--full"
-              onClick={handleSeeAnotherVirtualBuddy}
-            >
-              See someone else
-            </button>
-          </div>
+      {/* FACE TIME OPTIONAL CARD */}
+      {!accepted && (loading || !bestMatch) && (
+        <div className="match-card">
+          <button
+            type="button"
+            className="btn btn--primary btn--full"
+            onClick={handleFaceTimeClick}
+            disabled={videoLoading}
+          >
+            {videoLoading
+              ? "Finding someone to FaceTime…"
+              : "FaceTime another user"}
+          </button>
         </div>
       )}
 
-      {/* ------------- IN-PERSON MATCH UI ------------- */}
-      {!isVirtualTrip && bestMatch && (
+      {videoCandidate && !accepted && (
+        <div className="match-card">
+          <div className="match-face-row">
+            <div className="match-avatar">
+              {videoCandidate.name?.[0] || "U"}
+            </div>
+
+            <div className="match-face-info">
+              <div className="match-face-name">{videoCandidate.name}</div>
+              <div className="match-face-meta">
+                {videoCandidate.pronouns} • Rating{" "}
+                {videoCandidate.ratingAverage?.toFixed?.(1) ?? "—"} (
+                {videoCandidate.ratingCount ?? 0} reviews)
+              </div>
+              <div className="match-face-tagline">
+                Prefers starting on FaceTime
+              </div>
+            </div>
+          </div>
+
+          {!videoConfirmed ? (
+            <div className="match-face-actions">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={handleFaceTimeConfirm}
+              >
+                Confirm this person
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={handleFaceTimeReject}
+              >
+                See someone else
+              </button>
+            </div>
+          ) : (
+            <div className="match-face-actions">
+              <a
+                className="btn btn--primary btn--full"
+                href={
+                  videoCandidate.facetimeHandle
+                    ? `facetime:${videoCandidate.facetimeHandle}`
+                    : undefined
+                }
+              >
+                FaceTime {videoCandidate.name}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MATCH CARD */}
+      {bestMatch && (
         <div className="match-card">
           <div className="match-card-label">Your match</div>
 
@@ -777,9 +811,9 @@ export default function MatchScreen() {
 
               <div className="match-main-destination">
                 They’re heading toward{" "}
-                <strong>
-                  {bestMatch.trip.destination?.text || "a similar area"}
-                </strong>
+                  <strong>
+                    {bestMatch.trip.destination?.text || "a similar area"}
+                  </strong>
                 .
               </div>
             </div>
@@ -842,8 +876,8 @@ export default function MatchScreen() {
         </div>
       )}
 
-      {/* RATING CARD (in-person only) */}
-      {!isVirtualTrip && accepted && showRating && bestMatch && (
+      {/* RATING CARD */}
+      {accepted && showRating && bestMatch && (
         <div className="match-card">
           <div className="match-rating-title">
             Rate your experience with {bestMatch.user.name}
@@ -881,14 +915,14 @@ export default function MatchScreen() {
         </div>
       )}
 
-      {/* ROUTE CARD – ONLY for in-person trips */}
-      {myTrip && !isVirtualTrip && (
+      {/* ROUTE CARD */}
+      {myTrip && (
         <div className="match-card">
           <div className="match-card-label">
-            Your route{meetingPoint ? " & meeting point" : ""}
+            Your route{!isVirtual && meetingPoint ? " & meeting point" : ""}
           </div>
 
-          {meetingPoint && (
+          {!isVirtual && meetingPoint && (
             <>
               <div className="match-meeting-headline">
                 Your meeting point is{" "}
@@ -914,29 +948,40 @@ export default function MatchScreen() {
               <span>You</span>
             </div>
 
-            <div className="match-legend-row">
-              <span className="match-legend-dot match-legend-dot--meet" />
-              <span>
-                Meeting spot
-                {bestMatch?.user?.name
-                  ? ` with ${bestMatch.user.name}`
-                  : ""}
-              </span>
-            </div>
+            {!isVirtual && (
+              <div className="match-legend-row">
+                <span className="match-legend-dot match-legend-dot--meet" />
+                <span>
+                  Meeting spot
+                  {bestMatch?.user?.name
+                    ? ` with ${bestMatch.user.name}`
+                    : ""}
+                </span>
+              </div>
+            )}
 
             <div className="match-legend-row">
               <span className="match-legend-dot match-legend-dot--dest" />
               <span>Your destination</span>
             </div>
 
-            <div className="match-legend-row">
-              <span className="match-legend-line match-legend-line--solo" />
-              <span>Start → meeting point (you alone)</span>
-            </div>
-            <div className="match-legend-row">
-              <span className="match-legend-line match-legend-line--together" />
-              <span>Meeting point → destination (together)</span>
-            </div>
+            {isVirtual ? (
+              <div className="match-legend-row">
+                <span className="match-legend-line match-legend-line--solo" />
+                <span>Your route for this walk</span>
+              </div>
+            ) : (
+              <>
+                <div className="match-legend-row">
+                  <span className="match-legend-line match-legend-line--solo" />
+                  <span>Start → meeting point (you alone)</span>
+                </div>
+                <div className="match-legend-row">
+                  <span className="match-legend-line match-legend-line--together" />
+                  <span>Meeting point → destination (together)</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

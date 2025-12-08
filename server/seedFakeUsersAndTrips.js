@@ -1,4 +1,3 @@
-// server/seedFakeUsersAndTrips.js
 require("dotenv").config();
 const path = require("path");
 const mongoose = require("mongoose");
@@ -7,7 +6,7 @@ const admin = require("firebase-admin");
 
 const User = require("./models/User");
 
-// ---------- Mongo connection ----------
+//  Mongo connection
 async function connectMongo() {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -17,7 +16,7 @@ async function connectMongo() {
   console.log("✅ Connected to MongoDB (seed script)");
 }
 
-// ---------- Firestore connection ----------
+// Firestore connection 
 const serviceAccount = require(path.join(
   __dirname,
   "gethomesafe-220f1-firebase-adminsdk-fbsvc-a09d839c96.json"
@@ -31,7 +30,7 @@ if (!admin.apps.length) {
 const firestore = admin.firestore();
 console.log("✅ Connected to Firestore (seed script)");
 
-// ---------- Fake data ----------
+// Fake data 
 
 const NAMES = [
   "Alex Rivera",
@@ -126,16 +125,16 @@ function pickTwoDistinctSpots() {
   return [a, b];
 }
 
-// ---------- Seed ----------
+// Seed 
 async function seed() {
   try {
     await connectMongo();
 
-    console.log("🔄 Clearing existing seed users & trips (optional)...");
+    console.log("Clearing existing seed users & trips (optional)...");
     // If you only want to clear seed data, you could add a flag / filter.
     // For now we just don't delete anything to avoid nuking real data.
     // Uncomment if you want to wipe:
-    console.log("🔄 Clearing ALL users & trips...");
+    console.log("Clearing ALL users & trips...");
     await User.deleteMany({ ratingAverage: 5.0, ratingCount: { $gt: 0 } });
     await firestore.collection("trips").get().then((snap) => {
       const batch = firestore.batch();
@@ -220,9 +219,9 @@ async function seed() {
       console.log(`✅ Created user + trips for: ${name}`);
     }
 
-    console.log("🎉 Seeding complete.");
+    console.log("Seeding complete.");
   } catch (err) {
-    console.error("❌ Seed error:", err);
+    console.error("Seed error:", err);
   } finally {
     await mongoose.disconnect();
     process.exit(0);

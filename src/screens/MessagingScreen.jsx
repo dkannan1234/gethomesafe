@@ -1,4 +1,3 @@
-// src/screens/MessagingScreen.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -31,14 +30,13 @@ export default function MessagingScreen() {
   const [messages, setMessages] = useState([]);
   const listRef = useRef(null);
 
-  // 🔑 ROOM ID: based ONLY on the user pair, not the trip
+  // ROOM ID: based ONLY on the user pair, not the trip
   const roomId = useMemo(() => {
     if (state.roomId) return state.roomId;
     if (myUserId && otherUserId) {
       const pairKey = [String(myUserId), String(otherUserId)]
         .sort()
         .join("__");
-      // You can call it whatever; "users_" prefix just avoids colliding with any old rooms
       return `users_${pairKey}`;
     }
     return null;
@@ -90,7 +88,7 @@ export default function MessagingScreen() {
       name: myName,
       userId: myUserId,
       otherUserId,
-      tripId, // optional: still store which trip this was for, but it doesn't affect threading
+      tripId,
       createdAt: serverTimestamp(),
     });
 

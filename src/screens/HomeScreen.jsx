@@ -1,4 +1,3 @@
-// src/screens/HomeScreen.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import welcomeImage from "../assets/welcome-page.png";

@@ -1,8 +1,5 @@
-// server/utils/getFrontendBaseUrl.js
-
 function getFrontendBaseUrl() {
-  // If you already set FRONTEND_URL in .env, this will use that.
-  // Otherwise it falls back to localhost:5173 (your Vite dev server).
+  // falls back to localhost:5173 (Vite dev server).
   return (
     process.env.FRONTEND_URL ||
     "http://localhost:5173"

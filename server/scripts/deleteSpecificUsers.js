@@ -1,4 +1,3 @@
-// server/scripts/deleteSpecificUsers.js
 require("dotenv").config();
 const mongoose = require("mongoose");
 const User = require("../models/User");

@@ -1,4 +1,3 @@
-// src/screens/LocationInputScreen.jsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebaseClient";
@@ -75,7 +74,7 @@ export default function LocationInputScreen({ onContinue }) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
   const currentUserId = localStorage.getItem("ghs_user_id");
 
-  /* 1. Load Google Maps + autocomplete (only for IN-PERSON mode) */
+  /* Load Google Maps + autocomplete (only for IN-PERSON mode) */
   useEffect(() => {
     if (buddyMode !== "inperson") return; // skip map setup in virtual mode
 
@@ -153,7 +152,7 @@ export default function LocationInputScreen({ onContinue }) {
     };
   }, [apiKey, buddyMode]);
 
-  /* 2. Get current GPS origin (only for IN-PERSON mode) */
+  /* Get current GPS origin (only for IN-PERSON mode) */
   useEffect(() => {
     if (buddyMode !== "inperson") return;
 
@@ -204,7 +203,7 @@ export default function LocationInputScreen({ onContinue }) {
     );
   }, [buddyMode]);
 
-  /* 3. Bias autocomplete around origin (in-person only, but harmless if no origin) */
+  /* Bias autocomplete around origin (in-person only, but harmless if no origin) */
   useEffect(() => {
     if (buddyMode !== "inperson") return;
     if (!originCoords || !window.google?.maps) return;

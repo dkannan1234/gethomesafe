@@ -1,4 +1,3 @@
-// src/screens/LoginScreen.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -32,7 +31,7 @@ export default function LoginScreen({ initialMode = "signup" }) {
   const [error, setError] = useState("");
   const [info, setInfo] = useState(""); // optional, to show success/msg
 
-  // NEW: add "email" step into signup flow
+  // add "email" step into signup flow
   const signupSteps = ["name", "email", "phone", "password", "bio", "guidelines"];
   const loginSteps = ["phone", "password"];
   const steps = isSignup ? signupSteps : loginSteps;
@@ -81,12 +80,10 @@ export default function LoginScreen({ initialMode = "signup" }) {
       }
 
       if (isSignup) {
-        // ✅ SIGNUP FLOW: do NOT log them in yet
+        // SIGNUP FLOW: do NOT log them in yet
         setInfo(
           "Account created. Check your email (and spam folder) to verify your address before logging in."
         );
-
-        // Optional: mirror profile into Firestore right away
         try {
           const userId = data.user._id;
           await setDoc(
@@ -110,13 +107,13 @@ export default function LoginScreen({ initialMode = "signup" }) {
           );
         }
 
-        // ✅ Stay on this screen, show info + Back to Home button.
+        // Stay on this screen, show info + Back to Home button.
         // No auto-navigation here.
         setLoading(false);
         return;
       }
 
-      // ✅ LOGIN FLOW: only here do we store token & go home
+      // LOGIN FLOW: only here do we store token & go home
       localStorage.setItem("ghs_token", data.token);
       localStorage.setItem("ghs_name", data.user.name);
       localStorage.setItem("ghs_phone", data.user.phone);
@@ -414,7 +411,7 @@ export default function LoginScreen({ initialMode = "signup" }) {
               </button>
             )}
 
-            {/* ✅ EXTRA BUTTON: only show after signup success */}
+            {/* EXTRA BUTTON: only show after signup success */}
             {isSignup && isLastStep && info && (
               <button
                 type="button"

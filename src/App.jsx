@@ -28,16 +28,16 @@ export default function App() {
     <div className="app-shell">
       <div className="phone-frame">
         <Routes>
-          {/* default → login */}
+          {/* default -> login */}
            <Route path="/" element={<StartScreen />} />
 
-        {/* signup → multi-step with name/phone/password/guidelines */}
+        {/* signup -> multi-step with name/phone/password/guidelines */}
         <Route
           path="/signup"
           element={<LoginScreen initialMode="signup" />}
         />
 
-        {/* login → just phone/password steps */}
+        {/* login -> just phone/password steps */}
         <Route
           path="/login"
           element={<LoginScreen initialMode="login" />}
@@ -58,7 +58,7 @@ export default function App() {
           <Route path="/dev/dev-seed" element={<DevSeedData />} />
           <Route path="/trips/:tripId/messages" element={<MessagingScreen />} />
 
-          {/* unknown routes → login */}
+          {/* unknown routes -> login */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </div>

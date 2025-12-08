@@ -4,7 +4,7 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
 
-    // NEW: email for verification + uniqueness
+    // email for verification + uniqueness
     email: {
       type: String,
       required: true,

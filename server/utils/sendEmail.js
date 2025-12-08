@@ -1,4 +1,3 @@
-// server/utils/sendEmail.js
 const sgMail = require("@sendgrid/mail");
 
 const apiKey = process.env.SENDGRID_API_KEY;

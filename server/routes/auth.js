@@ -1,4 +1,3 @@
-// server/routes/auth.js
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -9,8 +8,6 @@ const { sendEmail } = require("../utils/sendEmail");
 const { getFrontendBaseUrl } = require("../utils/getFrontendBaseUrl");
 
 const router = express.Router();
-
-// ---------- Helpers ----------
 
 function normalizePhone(raw) {
   if (!raw) return null;
@@ -43,7 +40,7 @@ function generateToken(user) {
   );
 }
 
-// ---------- POST /api/auth/register ----------
+// POST /api/auth/register
 router.post("/register", async (req, res) => {
   try {
     const { name, email, phone, password, bio, agreedToGuidelines } = req.body;
@@ -156,7 +153,7 @@ If you did not request this, you can ignore this email.`,
   }
 });
 
-// ---------- GET /api/auth/verify-email?token=... ----------
+// GET /api/auth/verify-email?token=... 
 router.get("/verify-email", async (req, res) => {
   try {
     const { token } = req.query;
@@ -180,7 +177,7 @@ router.get("/verify-email", async (req, res) => {
     user.emailVerificationTokenExpiresAt = null;
     await user.save();
 
-    const frontendBase = getFrontendBaseUrl(); // 👈 no req
+    const frontendBase = getFrontendBaseUrl();
     return res.redirect(
       `${frontendBase}/email-verified?email=${encodeURIComponent(user.email)}`
     );
@@ -190,7 +187,7 @@ router.get("/verify-email", async (req, res) => {
   }
 });
 
-// ---------- POST /api/auth/login ----------
+// POST /api/auth/login 
 router.post("/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -235,7 +232,6 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials." });
     }
 
-    // For testing you can comment this block out, then re-enable once you're happy.
     if (!user.emailVerified) {
       console.log("[Login] Email not verified for", user.email);
       return res.status(403).json({

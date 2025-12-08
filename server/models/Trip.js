@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const tripSchema = new mongoose.Schema(
   {
-    // the “owner” user of this trip
+    // the owner user of this trip
     userId: {
       type: String,
       ref: "User",

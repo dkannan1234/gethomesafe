@@ -200,8 +200,8 @@ input {
 .center-screen {
   display: flex;
   flex-direction: column;
-  justify-content: center;     /* ⬆ vertical center */
-  align-items: center;          /* ⬅ horizontal center */
+  justify-content: center;     /* vertical center */
+  align-items: center;          /* horizontal center */
   text-align: center;
 }
 
@@ -410,10 +410,6 @@ input {
    JOURNEY / LOCATION SCREEN
 ============================ */
 
-/* ============================
-   JOURNEY / LOCATION SCREEN
-============================ */
-
 .journey-screen {
   background: var(--bg);
   display: flex;
@@ -606,7 +602,7 @@ input {
   padding-bottom: 16px;
 }
 
-/* big pink-ish “glass” cards */
+/* big pink-ish glass cards */
 .match-card {
   background: rgba(242, 141, 192, 0.16); /* #f28dc0 with transparency */
   border-radius: 20px;
@@ -996,7 +992,6 @@ input {
 
 /* === MESSAGING SCREEN === */
 
-/* === MESSAGING SCREEN FIXES === */
 
 .messaging-screen {
   background: linear-gradient(180deg, #ffffed, #fff7fb);
@@ -1054,7 +1049,7 @@ input {
   box-shadow: 0 4px 18px rgba(0,0,0,0.05);
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 160px); /* FIX: fits inside screen */
+  height: calc(100vh - 160px); /*fits inside screen */
   overflow: hidden;
 }
 
@@ -1072,7 +1067,7 @@ input {
   flex-direction: column;
   gap: 8px;
   padding: 6px 2px;
-  overflow-y: auto;     /* FIX: no cutoff ever */
+  overflow-y: auto;     /*  no cutoff ever */
 }
 
 /* bubbles */

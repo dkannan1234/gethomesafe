@@ -1,11 +1,8 @@
-// src/services/userService.js
-
 import { db } from "../firebaseClient";
 import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-// --- Helpers ---
 
 async function fetchUserFromApi(userId) {
   const res = await fetch(`${API_URL}/api/users/${userId}`);
@@ -67,17 +64,12 @@ async function fetchUserFromFirestore(userId) {
   };
 }
 
-// --- Public API ---
-
 export async function fetchUser(userId) {
   if (!userId) {
     throw new Error("No userId provided to fetchUser");
   }
 
-  // Because you said the ID string is the same in both systems,
-  // we don't need fancy detection – just try both.
-
-  // 1) Try Mongo / Node API first
+  // Try Mongo / Node API first
   try {
     const apiUser = await fetchUserFromApi(userId);
     if (apiUser) return apiUser;
@@ -88,11 +80,11 @@ export async function fetchUser(userId) {
     );
   }
 
-  // 2) Fallback to Firestore
+  // Fallback to Firestore
   const fsUser = await fetchUserFromFirestore(userId);
   if (fsUser) return fsUser;
 
-  // 3) Nothing worked
+  // Nothing worked
   throw new Error(`User ${userId} not found in API or Firestore`);
 }
 
@@ -104,7 +96,7 @@ export async function rateUser(userId, rating) {
     throw new Error("Invalid rating value");
   }
 
-  // 1) Try to rate via Node/Mongo API first
+  // Try to rate via Node/Mongo API first
   try {
     const res = await fetch(`${API_URL}/api/users/${userId}/rate`, {
       method: "POST",
@@ -131,7 +123,7 @@ export async function rateUser(userId, rating) {
     );
   }
 
-  // 2) Fallback rating logic in Firestore
+  // Fallback rating logic in Firestore
   const ref = doc(db, "users", userId);
 
   await updateDoc(ref, {

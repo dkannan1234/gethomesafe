@@ -1,5 +1,3 @@
-// src/utils/matching.js
-
 // Haversine distance in meters between two {lat, lng}
 export function haversineDistanceMeters(a, b) {
   if (!a || !b) return Infinity;
@@ -46,7 +44,7 @@ export function computeMatchScore(myTrip, otherTrip) {
 
   let score = 0;
 
-  // 1) Destination text similarity (if either side has text)
+  // Destination text similarity (if either side has text)
   if (myDestText && otherDestText) {
     // basic overlap: substring match either way
     if (
@@ -57,7 +55,7 @@ export function computeMatchScore(myTrip, otherTrip) {
     }
   }
 
-  // 2) Coordinate proximity if we have lat/lng for both
+  // Coordinate proximity if we have lat/lng for both
   const hasMyCoords =
     typeof myOrigin.lat === "number" &&
     typeof myOrigin.lng === "number" &&
@@ -71,7 +69,6 @@ export function computeMatchScore(myTrip, otherTrip) {
     typeof otherDest.lng === "number";
 
   if (hasMyCoords && hasOtherCoords) {
-    // You already have this helper; importing from "../utils/matching" above.
     // If it's in this same file, just call it directly.
     const startDist = haversineDistanceMeters(
       { lat: myOrigin.lat, lng: myOrigin.lng },
@@ -98,7 +95,7 @@ export function computeMatchScore(myTrip, otherTrip) {
     score += 0.3 * startScore + 0.3 * endScore;
   }
 
-  // 3) Slight bonus if same matchMode is explicitly set
+  // Slight bonus if same matchMode is explicitly set
   if (myTrip.matchMode && otherTrip.matchMode) {
     if (myTrip.matchMode === otherTrip.matchMode) {
       score += 0.1;
