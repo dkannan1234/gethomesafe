@@ -151,10 +151,12 @@ export default function MatchScreen() {
         return;
       }
 
-      // Normal match search
+      // Normal match search – now time-aware
       const candidates = await findCandidateMatchesForTrip(my, {
         maxResults: 3,
         minScore: 0.2,
+        timeWindowMinutes: 45, // ±45 minutes around my plannedStartTime
+        maxFutureMinutes: 180, // up to 3 hours in the future from now
       });
 
       if (!candidates.length) {
@@ -684,20 +686,19 @@ export default function MatchScreen() {
     <div className="screen match-screen">
       {/* HEADER */}
       <header className="screen-header match-header">
-      <button
-        type="button"
-        className="match-back-btn"
-        onClick={() => navigate(-1)}   // or () => navigate("/journey") if you prefer
-      >
-        ← Back to journey
-      </button>
+        <button
+          type="button"
+          className="match-back-btn"
+          onClick={() => navigate(-1)} // or () => navigate("/journey") if you prefer
+        >
+          ← Back to journey
+        </button>
 
-      <div className="match-header-text">
-        <h1 className="screen-title">{headerTitle}</h1>
-        <p className="screen-subtitle">{headerSubtitle}</p>
-      </div>
-    </header>
-
+        <div className="match-header-text">
+          <h1 className="screen-title">{headerTitle}</h1>
+          <p className="screen-subtitle">{headerSubtitle}</p>
+        </div>
+      </header>
 
       {/* REFRESH BUTTON */}
       {!accepted && (
@@ -812,9 +813,9 @@ export default function MatchScreen() {
 
               <div className="match-main-destination">
                 They’re heading toward{" "}
-                <strong>
-                  {bestMatch.trip.destination?.text || "a similar area"}
-                </strong>
+                  <strong>
+                    {bestMatch.trip.destination?.text || "a similar area"}
+                  </strong>
                 .
               </div>
             </div>
