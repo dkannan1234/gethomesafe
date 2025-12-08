@@ -8,8 +8,9 @@ This app was built using React. To run it, first clone the repository using ```g
 
 ## Feature showcases
 
-The top bar will allow you to navigate through the prototypes showing each of the technical requirements we will be illustrating. "Hello World" and "Hello Styles" only display the text and styles to be used throughout the project. "Messaging Test" allows users to enter a display name and Room ID, which is saved to an external database. "room" and "demo-room" are two available IDs that can be accessed for the prototype. "Location Test" allows users to share their location once or in real time and scroll around the map. "Mapping Test" allows users to input a start/end location and show the shortest calculated walking path between the two destinations. Three additional demos are included for the prototype.
+In a terminal window, open the /server folder and run node index.js. Then, run npm run dev -- --host 0.0.0.0 in a seperate window to generate a link to the website. This will allow you to sign up or log in. When signing up, include your name, number, email, a secure password, a brief bio, and agree to terms and conditions. After verifying your email, you are free to sign up! Log in to see create a new trip. You can select a start and end location and look for other buddies nearby. When matching, users display a number, their rating by other users, and their bio. If you want to find another match, you can click the refresh button to see another walking buddy. Alternatively, you can look for a virtual walking buddy and call them through their provided number if you do not wish to meet in-person. After your trip, you can leave a review of your walking buddy! 
+
 
 ## Attributions
 
-Large Language Models were used in the creation of this project.
+The use of LLMs, ChatGPT 5.1 in particular, was limited to debugging and feature support. All code was initially written by our project team. 
