@@ -1,5 +1,11 @@
 // server/index.js
-require("dotenv").config();
+const path = require("path");
+
+require("dotenv").config({
+  path: path.join(__dirname, ".env"),
+});
+
+console.log("Backend started. FRONTEND_URL =", process.env.FRONTEND_URL);
 
 const express = require("express");
 const mongoose = require("mongoose");
@@ -148,3 +154,4 @@ mongoose
     console.error("❌ Mongo connection error:", err);
     process.exit(1);
   });
+
