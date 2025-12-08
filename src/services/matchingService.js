@@ -1,4 +1,5 @@
 // src/services/matchingService.js
+
 import { db } from "../firebaseClient";
 import {
   collection,
@@ -18,64 +19,46 @@ import { computeMatchScore } from "../utils/matching";
 export async function fetchTrip(tripId) {
   const ref = doc(db, "trips", tripId);
   const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error(`Trip ${tripId} not found`);
+  if (!snap.exists()) {
+    throw new Error(`Trip ${tripId} not found`);
+  }
   return { id: snap.id, ...snap.data() };
 }
 
 /**
- * Convert Firestore Timestamp or ISO string to ms since epoch.
- */
-function toMillis(value) {
-  if (!value) return null;
-
-  // Firestore Timestamp support
-  if (typeof value.toMillis === "function") {
-    return value.toMillis();
-  }
-
-  // ISO string / Date string
-  const t = new Date(value).getTime();
-  if (Number.isNaN(t)) return null;
-  return t;
-}
-
-/**
  * Find candidate trips for the given trip.
- * Time-aware: only considers trips whose plannedStartTime
- * is close to myTrip.plannedStartTime and reasonably “live”.
- *
  * Returns a sorted array: highest score first.
+ *
+ * Options:
+ *   - maxResults (default 5)
+ *   - minScore (default 0.2)
+ *   - timeWindowMinutes (default 60) — ± window around myTrip.plannedStartTime
  */
 export async function findCandidateMatchesForTrip(myTrip, options = {}) {
   const {
     maxResults = 5,
-    minScore = 0.2, // filter out truly bad matches
-
-    // How close in time should trips be to each other (± minutes)
-    timeWindowMinutes = 45,
-
-    // How far into the future from *now* to consider “live” (minutes)
-    maxFutureMinutes = 180,
+    minScore = 0.2,
+    timeWindowMinutes = 60,
   } = options;
 
   const tripsCol = collection(db, "trips");
 
-  // Basic filter: other users, status 'searching'
-  const q = query(
-    tripsCol,
-    where("status", "==", "searching")
-    // later: add city/area filters if needed
-  );
+  // Only look at others who are currently searching.
+  const qTrips = query(tripsCol, where("status", "==", "searching"));
+  const snap = await getDocs(qTrips);
 
-  const snap = await getDocs(q);
   const myUserId = myTrip.userId;
   const excluded = new Set(myTrip.excludedUserIds || []);
 
-  const nowMs = Date.now();
-  const myStartMs = toMillis(myTrip.plannedStartTime) ?? nowMs;
-
+  // Parse my trip's planned start time (if any)
+  let myStartTimeMs = null;
+  if (myTrip.plannedStartTime) {
+    const t = new Date(myTrip.plannedStartTime).getTime();
+    if (!Number.isNaN(t)) {
+      myStartTimeMs = t;
+    }
+  }
   const timeWindowMs = timeWindowMinutes * 60 * 1000;
-  const maxFutureMs = maxFutureMinutes * 60 * 1000;
 
   const candidates = [];
 
@@ -88,39 +71,22 @@ export async function findCandidateMatchesForTrip(myTrip, options = {}) {
     // Skip excluded users for this trip
     if (excluded.has(t.userId)) return;
 
-    // Respect match mode (if both trips define one)
+    // Respect matchMode if both define it (virtual_only vs in_person)
     if (myTrip.matchMode && t.matchMode && myTrip.matchMode !== t.matchMode) {
       return;
     }
 
-    // ---- NEW: time-based “live” filters ----
-    const otherStartMs = toMillis(t.plannedStartTime);
-    if (!otherStartMs) {
-      // No time for them → treat as not live
-      return;
+    // Basic time filter if both have a plannedStartTime
+    if (myStartTimeMs && t.plannedStartTime) {
+      const otherStartMs = new Date(t.plannedStartTime).getTime();
+      if (!Number.isNaN(otherStartMs)) {
+        const diff = Math.abs(otherStartMs - myStartTimeMs);
+        if (diff > timeWindowMs) {
+          return; // too far apart in time
+        }
+      }
     }
 
-    // 1) Match people whose start time is close to mine
-    const diff = Math.abs(otherStartMs - myStartMs);
-    if (diff > timeWindowMs) {
-      return;
-    }
-
-    // 2) Only consider trips that are not way in the past
-    //    and not absurdly far in the future
-    const deltaFromNow = otherStartMs - nowMs;
-
-    // Too far in the past
-    if (deltaFromNow < -timeWindowMs) {
-      return;
-    }
-
-    // Too far in the future
-    if (deltaFromNow > maxFutureMs) {
-      return;
-    }
-
-    // ---- Existing spatial / destination scoring ----
     const score = computeMatchScore(myTrip, t);
     if (score >= minScore) {
       candidates.push({ trip: t, score });
@@ -136,6 +102,8 @@ export async function findCandidateMatchesForTrip(myTrip, options = {}) {
 /**
  * Mark a given userId as excluded for this trip
  * so they won't show up again as a candidate.
+ *
+ * Note: we *only* use arrayUnion — no indexOf / manual array stuff.
  */
 export async function excludeUserForTrip(tripId, userIdToExclude) {
   const ref = doc(db, "trips", tripId);

@@ -13,7 +13,7 @@ import { db } from "../firebaseClient";
 import "../styles.css";
 
 export default function MessagingScreen() {
-  const { tripId } = useParams();
+  const { tripId } = useParams(); // can still be in the URL, but we won't use it for the room key
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -30,23 +30,37 @@ export default function MessagingScreen() {
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const listRef = useRef(null);
-  const lastTitle = useRef(document.title);
 
+  // 🔑 ROOM ID: based ONLY on the user pair, not the trip
   const roomId = useMemo(() => {
     if (state.roomId) return state.roomId;
     if (myUserId && otherUserId) {
-      const pairKey = [myUserId, otherUserId].sort().join("__");
-      return `trip_${tripId}_${pairKey}`;
+      const pairKey = [String(myUserId), String(otherUserId)]
+        .sort()
+        .join("__");
+      // You can call it whatever; "users_" prefix just avoids colliding with any old rooms
+      return `users_${pairKey}`;
     }
-    return `trip_${tripId}`;
-  }, [tripId, myUserId, otherUserId, state.roomId]);
+    return null;
+  }, [myUserId, otherUserId, state.roomId]);
 
-  const colRef = useMemo(
-    () => collection(db, "rooms", roomId, "messages"),
-    [roomId]
-  );
+  const colRef = useMemo(() => {
+    if (!roomId) return null;
+    return collection(db, "rooms", roomId, "messages");
+  }, [roomId]);
 
+  // If someone somehow navigates here without IDs, bounce them back
   useEffect(() => {
+    if (!myUserId || !otherUserId) {
+      console.warn("[MessagingScreen] Missing user IDs, going back");
+      navigate(-1);
+    }
+  }, [myUserId, otherUserId, navigate]);
+
+  // Subscribe to messages in this user-pair room
+  useEffect(() => {
+    if (!colRef) return;
+
     const q = query(colRef, orderBy("createdAt", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       const docs = [];
@@ -69,19 +83,24 @@ export default function MessagingScreen() {
   const send = async (e) => {
     e.preventDefault();
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || !colRef) return;
 
     await addDoc(colRef, {
       text: trimmed,
       name: myName,
       userId: myUserId,
-      tripId,
       otherUserId,
+      tripId, // optional: still store which trip this was for, but it doesn't affect threading
       createdAt: serverTimestamp(),
     });
 
     setText("");
   };
+
+  if (!myUserId || !otherUserId || !roomId) {
+    // avoid rendering weirdly before we have IDs
+    return null;
+  }
 
   return (
     <div className="screen messaging-screen">
@@ -146,7 +165,10 @@ export default function MessagingScreen() {
               onChange={(e) => setText(e.target.value)}
               placeholder="Say hi and let them know your ETA…"
             />
-            <button type="submit" className="btn btn--primary messaging-send-btn">
+            <button
+              type="submit"
+              className="btn btn--primary messaging-send-btn"
+            >
               Send
             </button>
           </form>

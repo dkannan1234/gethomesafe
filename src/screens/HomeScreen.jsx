@@ -153,11 +153,7 @@ export default function HomeScreen() {
           </article>
         </section>
 
-        {/* RECENT JOURNEYS */}
-        <section className="card home-recent-card">
-          <p className="home-recent-title">Past journeys</p>
-          <p className="home-recent-empty">No journeys yet.</p>
-        </section>
+
       </main>
     </div>
   );

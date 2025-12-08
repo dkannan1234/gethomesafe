@@ -14,7 +14,9 @@ function loadGoogleMaps(apiKey) {
 
     const existingScript = document.querySelector("script[data-google-maps]");
     if (existingScript) {
-      existingScript.addEventListener("load", () => resolve(window.google.maps));
+      existingScript.addEventListener("load", () =>
+        resolve(window.google.maps)
+      );
       existingScript.addEventListener("error", reject);
       return;
     }
@@ -27,7 +29,10 @@ function loadGoogleMaps(apiKey) {
 
     script.onload = () => {
       if (window.google?.maps) resolve(window.google.maps);
-      else reject(new Error("Google Maps SDK loaded but window.google.maps is undefined"));
+      else
+        reject(
+          new Error("Google Maps SDK loaded but window.google.maps is undefined")
+        );
     };
     script.onerror = reject;
 
@@ -63,13 +68,17 @@ export default function LocationInputScreen({ onContinue }) {
   const [isSavingTrip, setIsSavingTrip] = useState(false);
 
   // in-person vs virtual buddy
+  // "inperson" → normal route flow
+  // "virtual"  → no location asked; just create a virtual-only trip
   const [buddyMode, setBuddyMode] = useState("inperson"); // "inperson" | "virtual"
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
   const currentUserId = localStorage.getItem("ghs_user_id");
 
-  /* 1. Load Google Maps + autocomplete */
+  /* 1. Load Google Maps + autocomplete (only for IN-PERSON mode) */
   useEffect(() => {
+    if (buddyMode !== "inperson") return; // skip map setup in virtual mode
+
     if (!apiKey) {
       setRouteError("Missing Google Maps API key.");
       return;
@@ -142,10 +151,12 @@ export default function LocationInputScreen({ onContinue }) {
     return () => {
       cancelled = true;
     };
-  }, [apiKey]);
+  }, [apiKey, buddyMode]);
 
-  /* 2. Get current GPS origin */
+  /* 2. Get current GPS origin (only for IN-PERSON mode) */
   useEffect(() => {
+    if (buddyMode !== "inperson") return;
+
     if (!navigator.geolocation) {
       setLocError("Geolocation not supported in this browser.");
       return;
@@ -191,10 +202,11 @@ export default function LocationInputScreen({ onContinue }) {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
+  }, [buddyMode]);
 
-  /* 3. Bias autocomplete around origin */
+  /* 3. Bias autocomplete around origin (in-person only, but harmless if no origin) */
   useEffect(() => {
+    if (buddyMode !== "inperson") return;
     if (!originCoords || !window.google?.maps) return;
     const gmaps = window.google.maps;
     const circle = new gmaps.Circle({
@@ -206,9 +218,9 @@ export default function LocationInputScreen({ onContinue }) {
 
     originAutocompleteRef.current?.setBounds(bounds);
     destAutocompleteRef.current?.setBounds(bounds);
-  }, [originCoords]);
+  }, [originCoords, buddyMode]);
 
-  /* Helper: draw route only */
+  /* Helper: draw route only (IN-PERSON MODE) */
   const showRoute = () => {
     setRouteError("");
     setRouteReady(false);
@@ -275,8 +287,8 @@ export default function LocationInputScreen({ onContinue }) {
     );
   };
 
-  /* Helper: save trip + go to match screen */
-  const createTripAndNavigate = async () => {
+  /* Helper: save IN-PERSON trip + go to match screen */
+  const createInPersonTripAndNavigate = async () => {
     setRouteError("");
 
     const originInputVal = originInputRef.current?.value.trim() || "";
@@ -296,7 +308,8 @@ export default function LocationInputScreen({ onContinue }) {
       const tripsCol = collection(db, "trips");
       const docRef = await addDoc(tripsCol, {
         userId: currentUserId,
-        buddyMode,
+        buddyMode: "inperson",
+        matchMode: "in_person",
         origin: {
           text: originText,
           lat: originCoords?.lat ?? null,
@@ -325,20 +338,65 @@ export default function LocationInputScreen({ onContinue }) {
     }
   };
 
+  /* Helper: save VIRTUAL-ONLY trip + go to match screen */
+  const createVirtualTripAndNavigate = async () => {
+    setRouteError("");
+    setIsSavingTrip(true);
+
+    try {
+      const tripsCol = collection(db, "trips");
+      const docRef = await addDoc(tripsCol, {
+        userId: currentUserId,
+        buddyMode: "virtual",
+        matchMode: "virtual_only",
+        origin: null,
+        destination: null,
+        plannedStartTime: new Date().toISOString(),
+        plannedEndTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        status: "searching",
+        activeMatchId: null,
+        excludedUserIds: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      navigate(`/match/${docRef.id}`);
+    } catch (err) {
+      console.error("Failed to create virtual trip:", err);
+      setRouteError("Could not start virtual buddy search. Try again.");
+    } finally {
+      setIsSavingTrip(false);
+    }
+  };
+
   const handlePrimaryClick = (e) => {
     e.preventDefault();
+
+    // If user selected Virtual buddy only → no route, no map, just create virtual trip
+    if (buddyMode === "virtual") {
+      createVirtualTripAndNavigate();
+      return;
+    }
+
+    // In-person flow: first compute route, then save/match
     if (!routeReady) showRoute();
-    else createTripAndNavigate();
+    else createInPersonTripAndNavigate();
   };
 
   const isBusy = isRouting || isSavingTrip;
-  const buttonLabel = !routeReady
-    ? isRouting
-      ? "Calculating route..."
-      : "Show my route"
-    : isSavingTrip
-    ? "Finding your buddy..."
-    : "Find me a match";
+
+  const buttonLabel =
+    buddyMode === "virtual"
+      ? isSavingTrip
+        ? "Finding your virtual buddy..."
+        : "Find me a virtual buddy"
+      : !routeReady
+      ? isRouting
+        ? "Calculating route..."
+        : "Show my route"
+      : isSavingTrip
+      ? "Finding your buddy..."
+      : "Find me a match";
 
   return (
     <div className="screen journey-screen">
@@ -368,7 +426,10 @@ export default function LocationInputScreen({ onContinue }) {
                 "journey-mode-btn" +
                 (buddyMode === "inperson" ? " journey-mode-btn--active" : "")
               }
-              onClick={() => setBuddyMode("inperson")}
+              onClick={() => {
+                setBuddyMode("inperson");
+                setRouteError("");
+              }}
             >
               In-person buddy
             </button>
@@ -378,7 +439,10 @@ export default function LocationInputScreen({ onContinue }) {
                 "journey-mode-btn" +
                 (buddyMode === "virtual" ? " journey-mode-btn--active" : "")
               }
-              onClick={() => setBuddyMode("virtual")}
+              onClick={() => {
+                setBuddyMode("virtual");
+                setRouteError("");
+              }}
             >
               Virtual buddy only
             </button>
@@ -387,46 +451,62 @@ export default function LocationInputScreen({ onContinue }) {
           <p className="journey-mode-help">
             {buddyMode === "inperson"
               ? "In-person buddies meet at a safe location and walk together."
-              : "Virtual buddies take similar routes, but just text or call while you walk."}
+              : "Virtual buddies don’t meet in person. You’ll just text or call while you each walk your own route — no location needed here."}
           </p>
         </section>
 
         {/* FORM */}
         <form className="journey-form" onSubmit={handlePrimaryClick}>
-          <section className="journey-field-group">
-            <label className="journey-label" htmlFor="origin-input">
-              Start
-            </label>
-            <input
-              id="origin-input"
-              ref={originInputRef}
-              type="text"
-              autoComplete="off"
-              placeholder="Use current location or type an address"
-              className="field-input journey-input"
-            />
+          {buddyMode === "inperson" && (
+            <>
+              <section className="journey-field-group">
+                <label className="journey-label" htmlFor="origin-input">
+                  Start
+                </label>
+                <input
+                  id="origin-input"
+                  ref={originInputRef}
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Use current location or type an address"
+                  className="field-input journey-input"
+                />
 
-            {originAddress && (
-              <div className="journey-helper">
-                Using current location: <strong>{originAddress}</strong>
-              </div>
-            )}
-            {locError && <div className="journey-error-small">{locError}</div>}
-          </section>
+                {originAddress && (
+                  <div className="journey-helper">
+                    Using current location: <strong>{originAddress}</strong>
+                  </div>
+                )}
+                {locError && (
+                  <div className="journey-error-small">{locError}</div>
+                )}
+              </section>
 
-          <section className="journey-field-group">
-            <label className="journey-label" htmlFor="destination-input">
-              Destination
-            </label>
-            <input
-              id="destination-input"
-              ref={destInputRef}
-              type="text"
-              autoComplete="off"
-              placeholder="e.g. Home, Library, Train station"
-              className="field-input journey-input"
-            />
-          </section>
+              <section className="journey-field-group">
+                <label className="journey-label" htmlFor="destination-input">
+                  Destination
+                </label>
+                <input
+                  id="destination-input"
+                  ref={destInputRef}
+                  type="text"
+                  autoComplete="off"
+                  placeholder="e.g. Home, Library, Train station"
+                  className="field-input journey-input"
+                />
+              </section>
+            </>
+          )}
+
+          {buddyMode === "virtual" && (
+            <section className="journey-field-group">
+              <p className="journey-helper">
+                You won’t be asked for your route here. After this, you’ll pick
+                a virtual buddy and can share your FaceTime / phone details on
+                the next screen.
+              </p>
+            </section>
+          )}
 
           <button
             type="submit"
@@ -439,10 +519,12 @@ export default function LocationInputScreen({ onContinue }) {
           {routeError && <div className="error">{routeError}</div>}
         </form>
 
-        {/* MAP SECTION */}
-        <section className="journey-map-section">
-          <div ref={mapDivRef} className="journey-map" />
-        </section>
+        {/* MAP SECTION – only show for in-person mode */}
+        {buddyMode === "inperson" && (
+          <section className="journey-map-section">
+            <div ref={mapDivRef} className="journey-map" />
+          </section>
+        )}
 
         {/* tiny buffer so the map never kisses the bottom */}
         <div style={{ height: 16 }} />

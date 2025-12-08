@@ -615,6 +615,21 @@ input {
   margin-top: 12px;
 }
 
+.match-virtual-blurb {
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.match-virtual-input {
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.match-virtual-save-btn {
+  margin-bottom: 12px;
+}
+
+
 /* refresh button */
 .match-refresh-btn {
   width: 100%;

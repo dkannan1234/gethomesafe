@@ -87,7 +87,7 @@ export default function LoginScreen({ initialMode = "signup" }) {
 
         // Optional: mirror profile into Firestore right away
         try {
-          const userId = data.user.id;
+          const userId = data.user._id;
           await setDoc(
             doc(db, "users", userId),
             {
