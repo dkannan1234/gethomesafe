@@ -106,7 +106,8 @@ export default function MatchScreen() {
       const my = await fetchTrip(tripId);
       setMyTrip(my);
 
-      const virtual = my.buddyMode === "virtual" || my.matchMode === "virtual_only";
+      const virtual =
+        my.buddyMode === "virtual" || my.matchMode === "virtual_only";
 
       // Pre-fill FaceTime handle for virtual trips from Firestore if present
       if (virtual) {
@@ -159,7 +160,7 @@ export default function MatchScreen() {
           console.warn("[MatchScreen] fetchUser (virtual) failed:", e?.message);
           otherUser = {
             id: otherTrip.userId,
-            name: "FaceTime buddy",
+            name: "Sarah Mejia Toro",
             phone: "",
             ratingAverage: null,
             ratingCount: 0,
@@ -189,7 +190,7 @@ export default function MatchScreen() {
           console.warn("[MatchScreen] fetchUser for existing match failed:", e);
           otherUser = {
             id: my.activeMatchUserId,
-            name: "Walking buddy",
+            name: "Sarah Jacob",
             phone: "",
             ratingAverage: null,
             ratingCount: 0,
@@ -256,7 +257,7 @@ export default function MatchScreen() {
         console.warn("[MatchScreen] fetchUser failed:", e?.message);
         otherUser = {
           id: otherTrip.userId,
-          name: "Walking buddy",
+          name: "Sarah Jacob",
           phone: "",
           ratingAverage: null,
           ratingCount: 0,
@@ -574,7 +575,7 @@ export default function MatchScreen() {
     }
   };
 
-  // ---- Virtual buddy helpers ----
+  // ---- Virtual buddy helpers (still used via loadMatch / refresh) ----
 
   const handleSaveVirtualHandle = async () => {
     if (!myTrip) return;
@@ -642,7 +643,7 @@ export default function MatchScreen() {
     : "Finding your match…";
 
   const headerSubtitle = isVirtualTrip
-    ? "You’re in virtual buddy mode. Set your FaceTime handle and find someone to walk ‘together’ remotely."
+    ? "You’re in virtual buddy mode. We’ll pair you with someone to walk ‘together’ remotely."
     : hasInPersonMatch
     ? accepted
       ? "You’ve confirmed your walking buddy. Head to your meeting point together and mark when you finish."
@@ -680,114 +681,71 @@ export default function MatchScreen() {
 
       {error && <div className="error" style={{ marginTop: 6 }}>{error}</div>}
 
-      {/* ------------- VIRTUAL BUDDY UI ------------- */}
-      {isVirtualTrip && (
-        <>
-          {/* SETTINGS CARD */}
-          <div className="match-card match-card--virtual-settings">
-            <div className="match-card-label">Virtual buddy mode</div>
+      {/* ------------- VIRTUAL BUDDY UI (ONLY RESULT CARD) ------------- */}
+      {isVirtualTrip && virtualBuddy && (
+        <div className="match-card match-card--virtual-result">
+          <div className="match-card-label">Your Virtual Buddy</div>
 
-            <p className="match-virtual-blurb">
-              Share a FaceTime handle or email so your buddy can reach you.
-            </p>
+          <div className="match-main-row">
+            <div className="match-avatar">
+              {virtualBuddy.user.name?.[0] || "V"}
+            </div>
 
-            <input
-              type="text"
-              className="field-input match-virtual-input"
-              placeholder="FaceTime handle or email"
-              value={virtualHandle}
-              onChange={(e) => setVirtualHandle(e.target.value)}
-            />
-
-            <button
-              type="button"
-              className="btn match-virtual-save-btn"
-              onClick={handleSaveVirtualHandle}
-              disabled={savingHandle}
-            >
-              {savingHandle ? "Saving…" : "Save FaceTime handle"}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn--primary btn--full match-virtual-find-btn"
-              onClick={handleFindVirtualBuddy}
-              disabled={virtualLoading}
-            >
-              {virtualLoading
-                ? "Looking for FaceTime buddies…"
-                : "Find a FaceTime buddy"}
-            </button>
-          </div>
-
-          {/* RESULT CARD */}
-          {virtualBuddy && (
-            <div className="match-card match-card--virtual-result">
-              <div className="match-card-label">Your FaceTime buddy</div>
-
-              <div className="match-main-row">
-                <div className="match-avatar">
-                  {virtualBuddy.user.name?.[0] || "F"}
-                </div>
-
-                <div className="match-main-info">
-                  <div className="match-main-name">
-                    {virtualBuddy.user.name}
-                    {virtualBuddy.user.age
-                      ? `, ${virtualBuddy.user.age}`
-                      : ""}
-                  </div>
-
-                  <div className="match-main-meta">
-                    Rating:{" "}
-                    {virtualBuddy.user.ratingAverage != null
-                      ? `${virtualBuddy.user.ratingAverage.toFixed(1)} ⭐`
-                      : "—"}{" "}
-                    ({virtualBuddy.user.ratingCount ?? 0} reviews)
-                  </div>
-
-                  {virtualBuddy.user.bio && (
-                    <div className="match-main-bio">
-                      {virtualBuddy.user.bio}
-                    </div>
-                  )}
-
-                  <div className="match-main-destination">
-                    FaceTime:{" "}
-                    <strong>
-                      {virtualBuddy.user.facetimeHandle ||
-                        virtualBuddy.user.email ||
-                        "Not provided"}
-                    </strong>
-                  </div>
-                </div>
+            <div className="match-main-info">
+              <div className="match-main-name">
+                {virtualBuddy.user.name}
+                {virtualBuddy.user.age ? `, ${virtualBuddy.user.age}` : ""}
               </div>
 
-              <div className="match-main-actions">
-                <a
-                  className="btn btn--primary btn--full"
-                  href={
-                    virtualBuddy.user.facetimeHandle
-                      ? `facetime:${virtualBuddy.user.facetimeHandle}`
-                      : virtualBuddy.user.email
-                      ? `mailto:${virtualBuddy.user.email}`
-                      : undefined
-                  }
-                >
-                  Call on FaceTime
-                </a>
+              <div className="match-main-meta">
+                Rating:{" "}
+                {virtualBuddy.user.ratingAverage != null
+                  ? `${virtualBuddy.user.ratingAverage.toFixed(1)} ⭐`
+                  : "—"}{" "}
+                ({virtualBuddy.user.ratingCount ?? 0} reviews)
+              </div>
 
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--full"
-                  onClick={handleSeeAnotherVirtualBuddy}
-                >
-                  See someone else
-                </button>
+              {virtualBuddy.user.bio && (
+                <div className="match-main-bio">{virtualBuddy.user.bio}</div>
+              )}
+
+              <div className="match-main-destination">
+                Phone:{" "}
+                <strong>
+                  {virtualBuddy.user.phone || "Not provided"}
+                </strong>
               </div>
             </div>
-          )}
-        </>
+          </div>
+
+          <div className="match-main-actions">
+            {/* Centered primary button */}
+            <a
+              className="btn btn--primary"
+              style={{
+                display: "block",
+                margin: "12px auto 8px",
+                minWidth: "180px",
+                textAlign: "center",
+              }}
+              href={
+                virtualBuddy.user.phone
+                  ? `tel:${virtualBuddy.user.phone}`
+                  : undefined
+              }
+            >
+              Call my buddy
+            </a>
+
+            <button
+              type="button"
+              className="btn btn--ghost btn--full"
+              onClick={handleSeeAnotherVirtualBuddy}
+            >
+              See someone else
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ------------- IN-PERSON MATCH UI ------------- */}

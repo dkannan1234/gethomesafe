@@ -1,3 +1,4 @@
+// src/screens/LoginScreen.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -109,9 +110,9 @@ export default function LoginScreen({ initialMode = "signup" }) {
           );
         }
 
-        // Option 1: keep them on this screen, just show info.
-        // Option 2: send them to login screen:
-        navigate("/login");
+        // ✅ Stay on this screen, show info + Back to Home button.
+        // No auto-navigation here.
+        setLoading(false);
         return;
       }
 
@@ -132,7 +133,6 @@ export default function LoginScreen({ initialMode = "signup" }) {
           ? `Could not reach the server at ${API_URL}. Make sure it's running.`
           : err.message
       );
-    } finally {
       setLoading(false);
     }
   };
@@ -141,6 +141,12 @@ export default function LoginScreen({ initialMode = "signup" }) {
     e.preventDefault();
     setError("");
     setInfo("");
+
+    // If we've already created the account and are just showing
+    // the "check your email" message, ignore further submits.
+    if (isSignup && isLastStep && info) {
+      return;
+    }
 
     if (currentStep === "name" && !name.trim()) {
       setError("Please tell us your name.");
@@ -257,6 +263,15 @@ export default function LoginScreen({ initialMode = "signup" }) {
   };
 
   const totalSteps = steps.length;
+
+  // Should we show the primary button?
+  // Hide it when we've just created the account and are telling them
+  // to check their email.
+  const showPrimaryButton = !(
+    isSignup &&
+    isLastStep &&
+    !!info
+  );
 
   return (
     <div className="screen typeform-screen">
@@ -388,13 +403,28 @@ export default function LoginScreen({ initialMode = "signup" }) {
               ))}
             </div>
 
-            <button
-              type="submit"
-              className="btn btn--primary tf-primary-btn"
-              disabled={loading}
-            >
-              {primaryButtonLabel()}
-            </button>
+            {/* Primary continue/create button – hidden after signup success */}
+            {showPrimaryButton && (
+              <button
+                type="submit"
+                className="btn btn--primary tf-primary-btn"
+                disabled={loading}
+              >
+                {primaryButtonLabel()}
+              </button>
+            )}
+
+            {/* ✅ EXTRA BUTTON: only show after signup success */}
+            {isSignup && isLastStep && info && (
+              <button
+                type="button"
+                className="btn btn--ghost tf-secondary-btn"
+                style={{ marginTop: "12px" }}
+                onClick={() => navigate("/")}
+              >
+                Back to Home
+              </button>
+            )}
           </div>
         </form>
       </div>
